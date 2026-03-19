@@ -1,18 +1,19 @@
 # ============================================================
-#  COMPUTER VISION — OpenCV + camera processing
+#  ML / AI STARTER — Machine learning on the edge
 # ============================================================
 #
 #  What you get:
-#    - OpenCV 4 (Python + C++ bindings)
-#    - Camera capture tools (fswebcam, GStreamer, v4l2)
-#    - Image processing libraries (Pillow, scikit-image, ImageMagick)
-#    - Scientific Python stack (NumPy, SciPy, Matplotlib)
-#    - C/C++ development tools
-#    - ffmpeg for video encoding/decoding
+#    - Python 3 with full scientific stack
+#    - scikit-learn (classic ML algorithms: decision trees,
+#      SVM, random forests, k-means, neural networks)
+#    - TensorFlow Lite (run pre-trained image classifiers
+#      and object detectors with low memory usage)
+#    - ONNX Runtime (run models exported from PyTorch/TF)
+#    - OpenCV for vision input to your ML models
+#    - C++ tools for performance-critical code
 #
-#  Best for: Vision-based robotics, object detection,
-#  colour tracking, lane detection, camera projects.
-#  Connect a standard USB webcam to get started.
+#  Best for: Edge AI projects, tinyML experiments,
+#  deploying trained models to a physical device.
 #
 schema_version: 1
 board: beaglebone-black
@@ -24,7 +25,7 @@ freeze:
   debian_snapshot: "2026-03-17T00:00:00Z"
 provision_mode: offline
 system:
-  hostname: bbb-vision
+  hostname: bbb-ml
   timezone: UTC
   locale: en_US.UTF-8
 user:
@@ -36,11 +37,11 @@ bundles:
   - core-dev
   - python
   - python-science
-  - cpp
+  - python-ml
+  - tflite
+  - onnx-runtime
   - opencv
-  - camera-tools
-  - image-processing
-  - gpio
+  - cpp
 apt:
   extra_packages: []
 network:
@@ -51,4 +52,4 @@ ssh:
   disable_password_auth: false
   permit_root_login: false
 output:
-  artifact_name: bbb-vision.img.xz
+  artifact_name: bbb-ml-ai.img.xz

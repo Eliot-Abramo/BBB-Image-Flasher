@@ -1,146 +1,808 @@
 <!doctype html>
 <html lang="en">
-  <head>
-    <meta charset="utf-8">
-    <title>BBB Image Forge</title>
-    <meta name="viewport" content="width=device-width, initial-scale=1">
-    <style>
-      body {
-        font-family: Inter, system-ui, sans-serif;
-        max-width: 980px;
-        margin: 2rem auto;
-        padding: 0 1rem;
-        line-height: 1.45;
-      }
-      .card {
-        border: 1px solid #ddd;
-        border-radius: 14px;
-        padding: 1rem;
-        margin-bottom: 1rem;
-      }
-      .grid {
-        display: grid;
-        grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-        gap: 1rem;
-      }
-      label {
-        display: block;
-        margin-bottom: 0.35rem;
-        font-weight: 600;
-      }
-      input, select, textarea, button {
-        width: 100%;
-        padding: 0.65rem;
-        border-radius: 10px;
-        border: 1px solid #bbb;
-        box-sizing: border-box;
-      }
-      textarea {
-        min-height: 110px;
-        font-family: ui-monospace, monospace;
-      }
-      .bundles label {
-        font-weight: 500;
-        display: flex;
-        gap: 0.5rem;
-        align-items: flex-start;
-      }
-      .bundles input {
-        width: auto;
-        margin-top: 0.2rem;
-      }
-      button {
-        cursor: pointer;
-      }
-      code, pre {
-        font-family: ui-monospace, monospace;
-      }
-      pre {
-        white-space: pre-wrap;
-        background: #f7f7f7;
-        padding: 1rem;
-        border-radius: 12px;
-        border: 1px solid #ddd;
-        overflow-x: auto;
-      }
-      .small {
-        color: #555;
-        font-size: 0.95rem;
-      }
-    </style>
-  </head>
-  <body>
+<head>
+  <meta charset="utf-8">
+  <title>BBB Image Forge — BeagleBone Black Image Builder</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <style>
+    /* ── Reset & base ── */
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    html { scroll-behavior: smooth; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      background: #f0f4f8;
+      color: #1a2332;
+      line-height: 1.6;
+      min-height: 100vh;
+    }
+
+    /* ── Layout ── */
+    .page-wrap {
+      max-width: 900px;
+      margin: 0 auto;
+      padding: 2rem 1rem 4rem;
+    }
+
+    /* ── Hero header ── */
+    .hero {
+      background: linear-gradient(135deg, #1a2e4a 0%, #0f6293 100%);
+      color: white;
+      border-radius: 20px;
+      padding: 2.5rem 2rem;
+      margin-bottom: 2rem;
+      text-align: center;
+    }
+    .hero h1 {
+      font-size: 2.2rem;
+      font-weight: 800;
+      letter-spacing: -0.5px;
+      margin-bottom: 0.5rem;
+    }
+    .hero .tagline {
+      font-size: 1.1rem;
+      opacity: 0.85;
+      max-width: 600px;
+      margin: 0 auto 1.5rem;
+    }
+    .hero .what-is-this {
+      background: rgba(255,255,255,0.12);
+      border: 1px solid rgba(255,255,255,0.2);
+      border-radius: 12px;
+      padding: 1rem 1.5rem;
+      text-align: left;
+      font-size: 0.95rem;
+      line-height: 1.7;
+    }
+    .hero .what-is-this strong { color: #7de0ff; }
+
+    /* ── Steps ── */
+    .step {
+      background: white;
+      border-radius: 16px;
+      padding: 1.8rem;
+      margin-bottom: 1.5rem;
+      box-shadow: 0 2px 12px rgba(0,0,0,0.07);
+    }
+    .step-header {
+      display: flex;
+      align-items: center;
+      gap: 1rem;
+      margin-bottom: 1.2rem;
+      padding-bottom: 1rem;
+      border-bottom: 2px solid #eef2f7;
+    }
+    .step-number {
+      background: #0f6293;
+      color: white;
+      width: 40px;
+      height: 40px;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 1.1rem;
+      font-weight: 800;
+      flex-shrink: 0;
+    }
+    .step-title {
+      font-size: 1.2rem;
+      font-weight: 700;
+      color: #1a2332;
+    }
+    .step-subtitle {
+      font-size: 0.88rem;
+      color: #5a7184;
+      margin-top: 0.1rem;
+    }
+
+    /* ── Help boxes ── */
+    .help-box {
+      background: #f0f8ff;
+      border: 1px solid #b3d9f2;
+      border-radius: 10px;
+      padding: 0.85rem 1rem;
+      font-size: 0.88rem;
+      color: #1d4f75;
+      margin-bottom: 1.2rem;
+      line-height: 1.6;
+    }
+    .help-box strong { color: #0f6293; }
+
+    /* ── Profile cards ── */
+    .profile-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+      gap: 0.8rem;
+    }
+    .profile-card {
+      border: 2px solid #e2e8f0;
+      border-radius: 12px;
+      padding: 1rem;
+      cursor: pointer;
+      transition: border-color 0.15s, background 0.15s, transform 0.1s;
+      position: relative;
+    }
+    .profile-card:hover {
+      border-color: #0f6293;
+      background: #f0f8ff;
+      transform: translateY(-1px);
+    }
+    .profile-card.selected {
+      border-color: #0f6293;
+      background: #e8f4fd;
+    }
+    .profile-card input[type="radio"] {
+      position: absolute;
+      opacity: 0;
+      pointer-events: none;
+    }
+    .profile-name {
+      font-weight: 700;
+      font-size: 0.95rem;
+      color: #1a2332;
+      margin-bottom: 0.25rem;
+    }
+    .profile-desc {
+      font-size: 0.8rem;
+      color: #5a7184;
+      line-height: 1.5;
+    }
+    .profile-badge {
+      display: inline-block;
+      background: #e8f4fd;
+      color: #0f6293;
+      border: 1px solid #b3d9f2;
+      border-radius: 6px;
+      padding: 0.1rem 0.5rem;
+      font-size: 0.72rem;
+      font-weight: 600;
+      margin-bottom: 0.4rem;
+    }
+    .profile-badge.beginner { background: #e8fdf0; color: #1a7c4a; border-color: #9de8bc; }
+    .profile-badge.advanced { background: #fff3e0; color: #a05800; border-color: #ffc87a; }
+    .profile-badge.heavy { background: #fde8e8; color: #a01a1a; border-color: #f5a0a0; }
+
+    /* ── Form inputs ── */
+    .form-group { margin-bottom: 1.2rem; }
+    label.field-label {
+      display: block;
+      font-weight: 600;
+      font-size: 0.9rem;
+      color: #2d3f52;
+      margin-bottom: 0.35rem;
+    }
+    .field-hint {
+      font-size: 0.8rem;
+      color: #6b8094;
+      margin-top: 0.25rem;
+    }
+    input[type="text"], input[type="password"], select, textarea {
+      width: 100%;
+      padding: 0.65rem 0.85rem;
+      border: 1.5px solid #d0dbe6;
+      border-radius: 10px;
+      font-size: 0.95rem;
+      font-family: inherit;
+      color: #1a2332;
+      background: white;
+      transition: border-color 0.15s, box-shadow 0.15s;
+      outline: none;
+    }
+    input[type="text"]:focus, input[type="password"]:focus,
+    select:focus, textarea:focus {
+      border-color: #0f6293;
+      box-shadow: 0 0 0 3px rgba(15, 98, 147, 0.12);
+    }
+    textarea {
+      min-height: 100px;
+      font-family: ui-monospace, "Cascadia Code", monospace;
+      font-size: 0.82rem;
+      resize: vertical;
+    }
+    .two-col {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 1rem;
+    }
+    @media (max-width: 600px) { .two-col { grid-template-columns: 1fr; } }
+
+    /* ── Checkbox/radio ── */
+    .checkbox-label {
+      display: flex;
+      align-items: flex-start;
+      gap: 0.6rem;
+      cursor: pointer;
+      padding: 0.6rem 0;
+    }
+    .checkbox-label input[type="checkbox"] {
+      width: 18px;
+      height: 18px;
+      margin-top: 0.1rem;
+      flex-shrink: 0;
+      accent-color: #0f6293;
+      cursor: pointer;
+    }
+    .checkbox-text strong {
+      display: block;
+      font-weight: 600;
+      font-size: 0.9rem;
+    }
+    .checkbox-text span {
+      font-size: 0.82rem;
+      color: #6b8094;
+    }
+
+    /* ── Bundle categories ── */
+    .category-section { margin-bottom: 1.5rem; }
+    .category-title {
+      font-size: 0.8rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: #5a7184;
+      margin-bottom: 0.6rem;
+      padding-bottom: 0.4rem;
+      border-bottom: 1px solid #eef2f7;
+    }
+    .bundle-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
+      gap: 0.5rem;
+    }
+    .bundle-item {
+      border: 1.5px solid #e2e8f0;
+      border-radius: 10px;
+      padding: 0.65rem 0.85rem;
+      cursor: pointer;
+      transition: border-color 0.15s, background 0.15s;
+      display: flex;
+      gap: 0.6rem;
+      align-items: flex-start;
+    }
+    .bundle-item:hover { border-color: #0f6293; background: #f7fbfe; }
+    .bundle-item.checked { border-color: #0f6293; background: #e8f4fd; }
+    .bundle-item input[type="checkbox"] {
+      width: 16px;
+      height: 16px;
+      margin-top: 0.2rem;
+      flex-shrink: 0;
+      accent-color: #0f6293;
+    }
+    .bundle-name {
+      font-weight: 600;
+      font-size: 0.87rem;
+      color: #1a2332;
+    }
+    .bundle-desc {
+      font-size: 0.78rem;
+      color: #6b8094;
+      margin-top: 0.15rem;
+      line-height: 1.45;
+    }
+
+    /* ── IP mode tabs ── */
+    .ip-tabs {
+      display: flex;
+      gap: 0.5rem;
+      margin-bottom: 1rem;
+    }
+    .ip-tab {
+      padding: 0.5rem 1.2rem;
+      border: 1.5px solid #d0dbe6;
+      border-radius: 8px;
+      cursor: pointer;
+      font-size: 0.9rem;
+      font-weight: 600;
+      background: white;
+      color: #5a7184;
+      transition: all 0.15s;
+    }
+    .ip-tab.active {
+      background: #0f6293;
+      border-color: #0f6293;
+      color: white;
+    }
+    .ip-static-fields { display: none; }
+    .ip-static-fields.visible { display: block; }
+
+    /* ── Warning box ── */
+    .warning-box {
+      background: #fff8e1;
+      border: 1px solid #ffd54f;
+      border-radius: 10px;
+      padding: 0.85rem 1rem;
+      font-size: 0.87rem;
+      color: #6d4c00;
+      margin-top: 1rem;
+    }
+    .warning-box strong { color: #a05800; }
+
+    /* ── Generate button ── */
+    .generate-section {
+      background: white;
+      border-radius: 16px;
+      padding: 1.8rem;
+      margin-bottom: 1.5rem;
+      box-shadow: 0 2px 12px rgba(0,0,0,0.07);
+      text-align: center;
+    }
+    .generate-btn {
+      display: inline-block;
+      padding: 1rem 3rem;
+      background: linear-gradient(135deg, #0f6293 0%, #1a8fbf 100%);
+      color: white;
+      border: none;
+      border-radius: 12px;
+      font-size: 1.1rem;
+      font-weight: 700;
+      cursor: pointer;
+      transition: transform 0.1s, box-shadow 0.15s;
+      box-shadow: 0 4px 14px rgba(15, 98, 147, 0.35);
+      width: 100%;
+      max-width: 400px;
+    }
+    .generate-btn:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 6px 20px rgba(15, 98, 147, 0.45);
+    }
+    .generate-btn:active { transform: translateY(0); }
+    .generate-hint {
+      font-size: 0.85rem;
+      color: #6b8094;
+      margin-top: 0.8rem;
+    }
+
+    /* ── What happens next ── */
+    .next-steps {
+      background: white;
+      border-radius: 16px;
+      padding: 1.8rem;
+      margin-bottom: 1.5rem;
+      box-shadow: 0 2px 12px rgba(0,0,0,0.07);
+    }
+    .next-steps h2 {
+      font-size: 1.15rem;
+      font-weight: 700;
+      margin-bottom: 1rem;
+    }
+    .step-list { list-style: none; }
+    .step-list li {
+      display: flex;
+      gap: 0.8rem;
+      padding: 0.6rem 0;
+      border-bottom: 1px solid #eef2f7;
+      font-size: 0.9rem;
+    }
+    .step-list li:last-child { border-bottom: none; }
+    .step-num {
+      background: #e8f4fd;
+      color: #0f6293;
+      width: 26px;
+      height: 26px;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 0.8rem;
+      font-weight: 700;
+      flex-shrink: 0;
+    }
+    code {
+      background: #eef2f7;
+      padding: 0.15rem 0.4rem;
+      border-radius: 4px;
+      font-family: ui-monospace, monospace;
+      font-size: 0.85em;
+      color: #0f6293;
+    }
+    pre {
+      background: #1a2332;
+      color: #a8d8f0;
+      border-radius: 10px;
+      padding: 1rem;
+      font-size: 0.85rem;
+      font-family: ui-monospace, monospace;
+      overflow-x: auto;
+      margin-top: 0.5rem;
+    }
+
+    /* ── Official images ── */
+    .images-box {
+      background: white;
+      border-radius: 16px;
+      padding: 1.8rem;
+      margin-bottom: 1.5rem;
+      box-shadow: 0 2px 12px rgba(0,0,0,0.07);
+    }
+    .images-box h2 { font-size: 1.1rem; font-weight: 700; margin-bottom: 1rem; }
+    .image-item {
+      padding: 0.6rem 0;
+      border-bottom: 1px solid #eef2f7;
+      font-size: 0.875rem;
+    }
+    .image-item:last-child { border-bottom: none; }
+    .image-label { font-weight: 600; color: #1a2332; }
+    .image-url {
+      font-size: 0.78rem;
+      color: #6b8094;
+      font-family: ui-monospace, monospace;
+      word-break: break-all;
+      margin-top: 0.15rem;
+    }
+  </style>
+</head>
+<body>
+<div class="page-wrap">
+
+  <!-- ── Hero ── -->
+  <div class="hero">
     <h1>BBB Image Forge</h1>
-    <p>Create a beginner-friendly, ready-to-flash BeagleBone Black image from the official Beagle Debian base image.</p>
-
-    <div class="card">
-      <h2>Official base images</h2>
-      {% if catalog_error %}
-        <p class="small">Could not fetch live catalog: {{ catalog_error }}</p>
-      {% else %}
-        <ul>
-          {% for entry in catalog_entries %}
-            <li><strong>{{ entry.label }}</strong><br><span class="small">{{ entry.image_url }}</span></li>
-          {% endfor %}
-        </ul>
-      {% endif %}
+    <p class="tagline">Build a custom BeagleBone Black SD card image — no command-line experience required.</p>
+    <div class="what-is-this">
+      <strong>What is this?</strong> A BeagleBone Black (BBB) is a small, credit-card-sized Linux computer — like a Raspberry Pi,
+      but designed specifically for engineering and robotics projects. It has pins you can connect to sensors, motors, and other
+      electronics. This tool lets you choose what software you want pre-installed on it, and creates a ready-to-flash image file
+      you can write to a microSD card — so your BBB boots up exactly how you want it, with no manual setup.
     </div>
+  </div>
 
-    <form class="card" method="post" action="/manifest">
-      <div class="grid">
+  <form method="post" action="/manifest" id="forge-form">
+
+    <!-- ── STEP 1: Choose a Starting Point ── -->
+    <div class="step">
+      <div class="step-header">
+        <div class="step-number">1</div>
         <div>
-          <label for="profile">Profile</label>
-          <select id="profile" name="profile">
-            {% for profile in profiles %}
-              <option value="{{ profile }}">{{ profile }}</option>
-            {% endfor %}
-          </select>
-        </div>
-        <div>
-          <label for="hostname">Hostname</label>
-          <input id="hostname" name="hostname" value="bbb-maker-01" required>
-        </div>
-        <div>
-          <label for="username">Username</label>
-          <input id="username" name="username" value="maker" required>
+          <div class="step-title">Choose a Starting Point</div>
+          <div class="step-subtitle">Pick a pre-made image built for your use case. You can add more software in Step 3.</div>
         </div>
       </div>
 
-      <div class="card bundles">
-        <h3>Tool bundles</h3>
-        {% for bundle in bundles %}
-          <label>
-            <input type="checkbox" name="bundle_names_selected" value="{{ bundle.name }}">
-            <span><strong>{{ bundle.name }}</strong><br><span class="small">{{ bundle.description }}</span></span>
+      <div class="help-box">
+        <strong>Not sure which to pick?</strong> If this is your first time, choose <strong>Beginner Starter</strong>.
+        For a robotics course, try <strong>Robotics Starter</strong>. You can always rebuild later with more packages.
+      </div>
+
+      <div class="profile-grid">
+
+        {% set profile_meta = {
+          "beginner_starter":    ("Beginner Starter",      "beginner", "Just Python 3, git, and basic tools. Easiest to start with. Log in with a password."),
+          "python_lab":          ("Python Lab",             "beginner", "Python + NumPy/Pandas/Matplotlib + GPIO and I2C sensors. Great for data logging and experiments."),
+          "robotics_starter":    ("Robotics Starter",       "beginner", "Python + C++ + full hardware stack (GPIO, I2C, UART, PWM, motors, sensors). Build your first robot."),
+          "robotics_ros":        ("Robotics + ROS 2",       "advanced", "Industry-standard Robot Operating System. Needs internet on first boot to download ROS (~500 MB)."),
+          "cv_opencv":           ("Computer Vision",        "beginner", "OpenCV + camera tools + scikit-image + Matplotlib. Connect a USB webcam and detect objects."),
+          "ml_ai":               ("ML / AI Starter",        "advanced", "scikit-learn + TensorFlow Lite + ONNX Runtime + OpenCV. Run ML models on the edge."),
+          "huggingface_ai":      ("Hugging Face AI",        "advanced", "Hugging Face Transformers (BERT, DistilBERT…) + NLTK. Run language models on your BBB."),
+          "iot_sensors":         ("IoT & Sensors",          "beginner", "MQTT + sensor libraries + SQLite + networking tools. Perfect for smart home / data-logging."),
+          "embedded_systems":    ("Embedded Systems",       "advanced", "C/C++ + Clang/Boost + full hardware interfaces + CAN bus. Low-level systems programming."),
+          "full_robotics_stack": ("Full Robotics Stack",    "heavy",    "Everything: OpenCV + ML + ROS-ready + all hardware interfaces. Large image, powerful setup."),
+        } %}
+
+        {% for profile_name in profiles %}
+          {% set meta = profile_meta.get(profile_name, (profile_name, "beginner", "")) %}
+          <label class="profile-card" id="card-{{ profile_name }}" onclick="selectProfile('{{ profile_name }}')">
+            <input type="radio" name="profile" value="{{ profile_name }}"
+                   {% if loop.first %}checked{% endif %}
+                   onchange="selectProfile('{{ profile_name }}')">
+            <div class="profile-badge {{ meta[1] }}">
+              {% if meta[1] == "beginner" %}Beginner-friendly
+              {% elif meta[1] == "advanced" %}Advanced
+              {% else %}Large image{% endif %}
+            </div>
+            <div class="profile-name">{{ meta[0] }}</div>
+            <div class="profile-desc">{{ meta[2] }}</div>
           </label>
         {% endfor %}
-      </div>
 
-      <div class="grid">
-        <label>
-          <input type="checkbox" name="disable_password_auth" checked style="width:auto; margin-right: 0.4rem;">
-          Disable SSH password login
-        </label>
-        <label>
-          <input type="checkbox" name="permit_root_login" style="width:auto; margin-right: 0.4rem;">
-          Permit root SSH login
-        </label>
       </div>
-
-      <div style="margin-top: 1rem;">
-        <label for="authorized_key">Authorized SSH public key</label>
-        <textarea id="authorized_key" name="authorized_key" placeholder="ssh-ed25519 AAAA..."></textarea>
-      </div>
-
-      <div style="margin-top: 1rem;">
-        <button type="submit">Generate manifest</button>
-      </div>
-    </form>
-
-    <div class="card">
-      <h2>Next step</h2>
-      <p>Save the generated JSON/YAML as a manifest, then run:</p>
-      <pre>sudo python -m app.cli build path/to/manifest.yml</pre>
     </div>
-  </body>
+
+    <!-- ── STEP 2: Set Up Your BBB ── -->
+    <div class="step">
+      <div class="step-header">
+        <div class="step-number">2</div>
+        <div>
+          <div class="step-title">Set Up Your BBB</div>
+          <div class="step-subtitle">Give your BBB a name and create your user account.</div>
+        </div>
+      </div>
+
+      <div class="help-box">
+        <strong>Hostname</strong> is like a name for your BBB on the network — it's how you find it.
+        <strong>Username</strong> is the account you'll log into. <strong>Password</strong> is what you type to log in.
+        Keep it simple for now — you can always change it later once you're in.
+      </div>
+
+      <div class="two-col">
+        <div class="form-group">
+          <label class="field-label" for="hostname">Hostname (BBB's network name)</label>
+          <input type="text" id="hostname" name="hostname" value="bbb-robot" required
+                 pattern="[a-zA-Z0-9][a-zA-Z0-9\-]{0,61}[a-zA-Z0-9]?"
+                 placeholder="e.g. bbb-robot">
+          <div class="field-hint">Letters, numbers, and hyphens only. No spaces. Example: <code>bbb-robot</code></div>
+        </div>
+        <div class="form-group">
+          <label class="field-label" for="username">Username (your account name)</label>
+          <input type="text" id="username" name="username" value="student" required
+                 placeholder="e.g. student">
+          <div class="field-hint">Lowercase letters and numbers only. Example: <code>student</code></div>
+        </div>
+      </div>
+
+      <div class="form-group">
+        <label class="field-label" for="password">Password (to log into your BBB)</label>
+        <input type="password" id="password" name="password" value="beaglebone" placeholder="Choose a password">
+        <div class="field-hint">
+          This is what you type when you SSH into your BBB. Leave blank to disable password login (you'll need an SSH key below instead).
+          Default: <code>beaglebone</code>
+        </div>
+      </div>
+
+    </div>
+
+    <!-- ── STEP 3: Network Settings ── -->
+    <div class="step">
+      <div class="step-header">
+        <div class="step-number">3</div>
+        <div>
+          <div class="step-title">Network / IP Address Settings</div>
+          <div class="step-subtitle">How your BBB connects to the network via the Ethernet cable.</div>
+        </div>
+      </div>
+
+      <div class="help-box">
+        <strong>Automatic (DHCP)</strong> means your router assigns an IP address — this is the easiest option for most people.
+        Choose <strong>Static IP</strong> only if you want your BBB to always have the same address
+        (useful if your router doesn't support DNS lookups by hostname).
+      </div>
+
+      <input type="hidden" name="ip_mode" id="ip_mode_input" value="dhcp">
+
+      <div class="ip-tabs">
+        <button type="button" class="ip-tab active" id="tab-dhcp" onclick="setIpMode('dhcp')">
+          Automatic (recommended)
+        </button>
+        <button type="button" class="ip-tab" id="tab-static" onclick="setIpMode('static')">
+          Static IP address
+        </button>
+      </div>
+
+      <div class="ip-static-fields" id="static-fields">
+        <div class="two-col">
+          <div class="form-group">
+            <label class="field-label" for="static_address">IP Address (with subnet)</label>
+            <input type="text" id="static_address" name="static_address"
+                   placeholder="e.g. 192.168.1.100/24">
+            <div class="field-hint">Write the address and mask together, like <code>192.168.1.100/24</code>. The <code>/24</code> means a standard home network subnet.</div>
+          </div>
+          <div class="form-group">
+            <label class="field-label" for="static_gateway">Gateway (your router's IP)</label>
+            <input type="text" id="static_gateway" name="static_gateway"
+                   placeholder="e.g. 192.168.1.1">
+            <div class="field-hint">Usually your router's IP. Check it by running <code>ipconfig</code> (Windows) or <code>ip route</code> (Linux/Mac).</div>
+          </div>
+        </div>
+        <div class="form-group">
+          <label class="field-label" for="static_dns">DNS Servers (space-separated)</label>
+          <input type="text" id="static_dns" name="static_dns" value="8.8.8.8 1.1.1.1">
+          <div class="field-hint">DNS servers translate domain names to IPs. <code>8.8.8.8</code> is Google, <code>1.1.1.1</code> is Cloudflare. The defaults are fine.</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── STEP 4: Add Extra Software ── -->
+    <div class="step">
+      <div class="step-header">
+        <div class="step-number">4</div>
+        <div>
+          <div class="step-title">Add Extra Software Packages</div>
+          <div class="step-subtitle">Tick anything extra you want installed. Your chosen profile already includes some of these.</div>
+        </div>
+      </div>
+
+      <div class="help-box">
+        These are <strong>optional extras</strong> — your chosen profile in Step 1 already includes a good set of tools.
+        Only add what you know you'll need. More packages = longer build time and larger image.
+        Each package includes a description so you know exactly what you're getting.
+      </div>
+
+      {% for category, bundles in bundles_by_category.items() %}
+      <div class="category-section">
+        <div class="category-title">{{ category }}</div>
+        <div class="bundle-grid">
+          {% for bundle in bundles %}
+          <label class="bundle-item" id="bundle-label-{{ bundle.name }}" onclick="toggleBundle('{{ bundle.name }}')">
+            <input type="checkbox" name="bundle_names_selected" value="{{ bundle.name }}"
+                   id="bundle-{{ bundle.name }}"
+                   onchange="updateBundleStyle('{{ bundle.name }}')">
+            <div>
+              <div class="bundle-name">{{ bundle.name }}</div>
+              <div class="bundle-desc">{{ bundle.description }}</div>
+            </div>
+          </label>
+          {% endfor %}
+        </div>
+      </div>
+      {% endfor %}
+
+    </div>
+
+    <!-- ── STEP 5: SSH Access ── -->
+    <div class="step">
+      <div class="step-header">
+        <div class="step-number">5</div>
+        <div>
+          <div class="step-title">SSH Access Settings</div>
+          <div class="step-subtitle">SSH is how you connect to your BBB from your computer — like a remote control.</div>
+        </div>
+      </div>
+
+      <div class="help-box">
+        <strong>What is SSH?</strong> SSH (Secure Shell) lets you type commands on your BBB from your laptop over a network cable.
+        You open a terminal (or PuTTY on Windows) and type <code>ssh student@192.168.1.100</code> and you're in.
+        <br><br>
+        <strong>Password login</strong> is the easiest option for beginners — just keep it enabled.
+        <strong>SSH keys</strong> are more secure but require extra setup (you can add them later).
+      </div>
+
+      <div style="margin-bottom: 1rem;">
+        <label class="checkbox-label">
+          <input type="checkbox" name="disable_password_auth" id="disable_password_auth">
+          <div class="checkbox-text">
+            <strong>Disable password login (SSH key only)</strong>
+            <span>More secure, but you MUST paste an SSH public key below or you'll be locked out!</span>
+          </div>
+        </label>
+        <label class="checkbox-label">
+          <input type="checkbox" name="permit_root_login" id="permit_root_login">
+          <div class="checkbox-text">
+            <strong>Allow root SSH login</strong>
+            <span>Not recommended. Log in as your user and use <code>sudo</code> instead.</span>
+          </div>
+        </label>
+      </div>
+
+      <div class="form-group">
+        <label class="field-label" for="authorized_key">SSH Public Key (optional)</label>
+        <textarea id="authorized_key" name="authorized_key"
+                  placeholder="Paste your SSH public key here, e.g.:&#10;ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIExampleKeyHere user@laptop&#10;&#10;Leave blank if you're using password login."></textarea>
+        <div class="field-hint">
+          To generate an SSH key on your computer: open a terminal and type <code>ssh-keygen -t ed25519</code>,
+          then paste the contents of the file <code>~/.ssh/id_ed25519.pub</code> here.
+          On Windows, use PuTTYgen or Git Bash.
+        </div>
+      </div>
+
+    </div>
+
+    <!-- ── Generate button ── -->
+    <div class="generate-section">
+      <button type="submit" class="generate-btn">Generate My Manifest</button>
+      <div class="generate-hint">
+        This will generate a configuration file (manifest). Save it, then run the build command below to create your image.
+      </div>
+    </div>
+
+  </form>
+
+  <!-- ── What happens next ── -->
+  <div class="next-steps">
+    <h2>What happens after you click Generate?</h2>
+    <ol class="step-list">
+      <li>
+        <div class="step-num">1</div>
+        <div>A <strong>manifest file</strong> (JSON) will appear on the next page. Save it as <code>my-bbb.json</code> on your computer.</div>
+      </li>
+      <li>
+        <div class="step-num">2</div>
+        <div>
+          On a <strong>Linux computer</strong>, install the tool and run the build:
+          <pre>python3 -m venv .venv
+source .venv/bin/activate
+pip install -r requirements.txt
+sudo python -m app.cli build my-bbb.json</pre>
+          This downloads the official BBB image (~1 GB), installs your chosen packages into it, and produces a <code>.img.xz</code> file.
+        </div>
+      </li>
+      <li>
+        <div class="step-num">3</div>
+        <div>
+          <strong>Flash the image</strong> to a microSD card (8 GB minimum) using
+          <strong>balenaEtcher</strong> (free, works on Windows/Mac/Linux).
+          Download it from <code>balena.io/etcher</code>.
+        </div>
+      </li>
+      <li>
+        <div class="step-num">4</div>
+        <div>
+          <strong>Insert the SD card</strong> into your BBB, connect an Ethernet cable, and power it on.
+          Wait about 30–60 seconds for it to boot.
+        </div>
+      </li>
+      <li>
+        <div class="step-num">5</div>
+        <div>
+          <strong>Find your BBB's IP address</strong> from your router's admin page (usually <code>192.168.1.1</code>),
+          or use <code>nmap -sn 192.168.1.0/24</code>.
+        </div>
+      </li>
+      <li>
+        <div class="step-num">6</div>
+        <div>
+          <strong>SSH in!</strong> Open a terminal (or PuTTY on Windows) and type:
+          <pre>ssh student@192.168.1.100</pre>
+          Use the password you chose in Step 2. You're in! Your BBB is ready.
+        </div>
+      </li>
+    </ol>
+  </div>
+
+  <!-- ── Official images ── -->
+  <div class="images-box">
+    <h2>Official BeagleBone Black Base Images</h2>
+    {% if catalog_error %}
+      <p style="color:#a01a1a; font-size:0.88rem;">Could not fetch live catalog: {{ catalog_error }}</p>
+    {% else %}
+      <p style="font-size:0.85rem; color:#5a7184; margin-bottom:1rem;">
+        These are the official Debian images from BeagleBoard.org that this tool builds on top of.
+        You don't need to download these manually — the build process handles it automatically.
+      </p>
+      {% for entry in catalog_entries %}
+        <div class="image-item">
+          <div class="image-label">{{ entry.label }}</div>
+          <div class="image-url">{{ entry.image_url }}</div>
+        </div>
+      {% endfor %}
+    {% endif %}
+  </div>
+
+</div><!-- end .page-wrap -->
+
+<script>
+  // ── Profile card selection ──
+  function selectProfile(name) {
+    document.querySelectorAll('.profile-card').forEach(el => el.classList.remove('selected'));
+    const card = document.getElementById('card-' + name);
+    if (card) card.classList.add('selected');
+    const radio = card ? card.querySelector('input[type="radio"]') : null;
+    if (radio) radio.checked = true;
+  }
+
+  // Initialise first card as selected on load
+  window.addEventListener('DOMContentLoaded', function () {
+    const first = document.querySelector('input[type="radio"][name="profile"]:checked');
+    if (first) {
+      const card = first.closest('.profile-card');
+      if (card) card.classList.add('selected');
+    }
+  });
+
+  // ── Bundle checkbox styling ──
+  function toggleBundle(name) {
+    const cb = document.getElementById('bundle-' + name);
+    if (cb) cb.checked = !cb.checked;
+    updateBundleStyle(name);
+  }
+  function updateBundleStyle(name) {
+    const cb = document.getElementById('bundle-' + name);
+    const lbl = document.getElementById('bundle-label-' + name);
+    if (!cb || !lbl) return;
+    lbl.classList.toggle('checked', cb.checked);
+  }
+  // Prevent double-toggle when clicking the checkbox itself
+  document.querySelectorAll('.bundle-item input[type="checkbox"]').forEach(cb => {
+    cb.addEventListener('click', function(e) { e.stopPropagation(); updateBundleStyle(this.value); });
+  });
+
+  // ── IP mode toggle ──
+  function setIpMode(mode) {
+    document.getElementById('ip_mode_input').value = mode;
+    document.getElementById('tab-dhcp').classList.toggle('active', mode === 'dhcp');
+    document.getElementById('tab-static').classList.toggle('active', mode === 'static');
+    const fields = document.getElementById('static-fields');
+    if (mode === 'static') fields.classList.add('visible');
+    else fields.classList.remove('visible');
+  }
+</script>
+</body>
 </html>

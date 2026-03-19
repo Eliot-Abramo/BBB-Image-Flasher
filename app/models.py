@@ -19,10 +19,12 @@ class FreezeModel(BaseModel):
 class SystemModel(BaseModel):
     hostname: str = Field(min_length=1, max_length=63)
     timezone: str = "UTC"
+    locale: str = "en_US.UTF-8"
 
 
 class UserModel(BaseModel):
     username: str = Field(min_length=1, max_length=32)
+    password: str | None = None          # plaintext — hashed via chpasswd in builder
     password_locked: bool = True
     authorized_keys: list[str] = Field(default_factory=list)
 
@@ -36,8 +38,22 @@ class WifiModel(BaseModel):
     psk: str
 
 
+class StaticIPConfig(BaseModel):
+    """Static IP configuration in CIDR notation, e.g. address='192.168.1.100/24'."""
+
+    address: str                            # e.g. "192.168.1.100/24"
+    gateway: str | None = None              # e.g. "192.168.1.1"
+    dns_servers: list[str] = Field(default_factory=lambda: ["8.8.8.8", "1.1.1.1"])
+
+
+class EthernetModel(BaseModel):
+    mode: Literal["dhcp", "static"] = "dhcp"
+    static: StaticIPConfig | None = None
+
+
 class NetworkModel(BaseModel):
     wifi: WifiModel | None = None
+    ethernet: EthernetModel = Field(default_factory=EthernetModel)
 
 
 class SSHModel(BaseModel):
@@ -68,6 +84,12 @@ class ManifestModel(BaseModel):
 class Bundle:
     name: str
     description: str
+    category: str = "General"
     apt_packages: list[str] = field(default_factory=list)
+    pip_packages: list[str] = field(default_factory=list)
+    # Commands injected into the firstboot script BEFORE apt-get install.
+    # Useful for adding 3rd-party apt repositories (e.g. ROS).
+    # Ignored in offline build mode.
+    firstboot_commands: list[str] = field(default_factory=list)
     services: list[str] = field(default_factory=list)
     files: dict[str, str] = field(default_factory=dict)

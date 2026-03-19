@@ -1,18 +1,23 @@
 # ============================================================
-#  COMPUTER VISION — OpenCV + camera processing
+#  HUGGING FACE AI — Transformers and NLP on the BBB
 # ============================================================
 #
 #  What you get:
-#    - OpenCV 4 (Python + C++ bindings)
-#    - Camera capture tools (fswebcam, GStreamer, v4l2)
-#    - Image processing libraries (Pillow, scikit-image, ImageMagick)
-#    - Scientific Python stack (NumPy, SciPy, Matplotlib)
-#    - C/C++ development tools
-#    - ffmpeg for video encoding/decoding
+#    - Hugging Face Transformers library (BERT, GPT-2, T5…)
+#    - Hugging Face Datasets and Tokenizers
+#    - NLTK (Natural Language Toolkit)
+#    - scikit-learn for traditional ML
+#    - Full scientific Python stack
+#    - OpenCV for vision+language tasks
 #
-#  Best for: Vision-based robotics, object detection,
-#  colour tracking, lane detection, camera projects.
-#  Connect a standard USB webcam to get started.
+#  NOTE: Large language models (GPT-2, BERT-large) may run
+#  slowly or run out of memory on the BBB's 512 MB RAM.
+#  Use small/distilled model variants (DistilBERT, TinyBERT)
+#  for best results. Smaller models work great!
+#
+#  Best for: NLP coursework, text classification,
+#  sentiment analysis, question answering, and
+#  experimenting with pre-trained AI models.
 #
 schema_version: 1
 board: beaglebone-black
@@ -24,7 +29,7 @@ freeze:
   debian_snapshot: "2026-03-17T00:00:00Z"
 provision_mode: offline
 system:
-  hostname: bbb-vision
+  hostname: bbb-hf
   timezone: UTC
   locale: en_US.UTF-8
 user:
@@ -36,11 +41,10 @@ bundles:
   - core-dev
   - python
   - python-science
-  - cpp
-  - opencv
-  - camera-tools
-  - image-processing
-  - gpio
+  - python-ml
+  - huggingface
+  - ml-nlp
+  - sqlite
 apt:
   extra_packages: []
 network:
@@ -51,4 +55,4 @@ ssh:
   disable_password_auth: false
   permit_root_login: false
 output:
-  artifact_name: bbb-vision.img.xz
+  artifact_name: bbb-huggingface-ai.img.xz

@@ -1,0 +1,62 @@
+# ============================================================
+#  ROBOTICS + ROS 2 — Industry-standard robot framework
+# ============================================================
+#
+#  What you get:
+#    - ROS 2 (Robot Operating System 2) — topics, services,
+#      launch files, rosbag recording
+#    - Python 3 + C++ development tools
+#    - Full hardware interface stack (GPIO, I2C, UART)
+#    - Motor and sensor libraries
+#
+#  IMPORTANT — FIRST BOOT REQUIRES INTERNET:
+#    This image uses "firstboot" mode. The first time you
+#    power on your BBB, it needs a working internet connection
+#    to download and install ROS 2 (~500 MB). This can take
+#    10–20 minutes. Do NOT power off during this time!
+#    You will see normal console output while it works.
+#
+#  Best for: Advanced robotics, ROS-based projects,
+#  competition teams (FIRST, RoboSub, RoboMaster, etc.)
+#
+schema_version: 1
+board: beaglebone-black
+base_image:
+  url: https://files.beagle.cc/file/beagleboard-public-2021/images/am335x-debian-13.4-base-v6.18-armhf-2026-03-17-4gb.img.xz
+  sha256: f82f719020014a8455f754ba002238f19a963410edc25d73ac98f380bc3c6d01
+  label: BeagleBone Black Debian 13.4 IoT 2026-03-17
+freeze:
+  debian_snapshot: null            # No snapshot freeze — needs live apt for ROS repo
+provision_mode: firstboot          # Downloads ROS on first boot (requires internet!)
+system:
+  hostname: bbb-ros
+  timezone: UTC
+  locale: en_US.UTF-8
+user:
+  username: student
+  password: beaglebone
+  password_locked: false
+  authorized_keys: []
+bundles:
+  - core-dev
+  - python
+  - python-science
+  - cpp
+  - gpio
+  - i2c-spi
+  - uart-serial
+  - robotics-motors
+  - robotics-sensors
+  - robotics-ros              # Adds ROS 2 apt repository + installs ros-base
+  - robotics-lite
+apt:
+  extra_packages: []
+network:
+  wifi: null
+  ethernet:
+    mode: dhcp
+ssh:
+  disable_password_auth: false
+  permit_root_login: false
+output:
+  artifact_name: bbb-robotics-ros.img.xz

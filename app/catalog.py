@@ -24,7 +24,7 @@ class CatalogError(RuntimeError):
 
 class BeagleCatalog:
     def fetch_bbb_images(self) -> list[CatalogEntry]:
-        response = requests.get(DISTROS_URL, timeout=20)
+        response = requests.get(DISTROS_URL, timeout=5)
         response.raise_for_status()
         soup = BeautifulSoup(response.text, "html.parser")
 
@@ -52,7 +52,7 @@ class BeagleCatalog:
         return entries
 
     def _parse_detail_page(self, url: str) -> CatalogEntry | None:
-        response = requests.get(url, timeout=20)
+        response = requests.get(url, timeout=5)
         response.raise_for_status()
         soup = BeautifulSoup(response.text, "html.parser")
         text = soup.get_text("\n", strip=True)

@@ -1,16 +1,19 @@
 # ============================================================
-#  PYTHON LAB — Python programming + hardware I/O
+#  EMBEDDED SYSTEMS — Low-level C/C++ development
 # ============================================================
 #
 #  What you get:
-#    - Python 3 with pip and venv
-#    - Scientific computing: NumPy, SciPy, Pandas, Matplotlib
-#    - GPIO control (read/write digital pins)
-#    - I2C and SPI (talk to sensors and displays)
-#    - All core developer tools
+#    - GCC/G++ compiler, CMake, Make, pkg-config
+#    - Clang/LLDB (alternative compiler with better errors)
+#    - Boost C++ libraries (threading, filesystem, networking)
+#    - GDB + Valgrind for debugging and memory checking
+#    - GPIO, I2C, SPI, UART, CAN bus interfaces
+#    - Python for scripting and quick tests
+#    - Cross-compilation friendly environment
 #
-#  Best for: Python programming courses, sensor reading,
-#  data logging, and basic hardware experiments.
+#  Best for: Embedded C/C++ coursework, firmware-style
+#  programming on Linux, systems programming, driver development,
+#  and projects where every byte and cycle counts.
 #
 schema_version: 1
 board: beaglebone-black
@@ -22,7 +25,7 @@ freeze:
   debian_snapshot: "2026-03-17T00:00:00Z"
 provision_mode: offline
 system:
-  hostname: bbb-python-lab
+  hostname: bbb-embedded
   timezone: UTC
   locale: en_US.UTF-8
 user:
@@ -32,13 +35,22 @@ user:
   authorized_keys: []
 bundles:
   - core-dev
+  - cpp
+  - cpp-advanced
+  - debugging-tools
   - python
-  - python-science
   - gpio
   - i2c-spi
   - uart-serial
+  - can-bus
+  - monitoring
+  - system-utils
 apt:
-  extra_packages: []
+  extra_packages:
+    - libssl-dev
+    - libffi-dev
+    - libelf-dev
+    - linux-headers-armmp
 network:
   wifi: null
   ethernet:
@@ -47,4 +59,4 @@ ssh:
   disable_password_auth: false
   permit_root_login: false
 output:
-  artifact_name: bbb-python-lab.img.xz
+  artifact_name: bbb-embedded-systems.img.xz

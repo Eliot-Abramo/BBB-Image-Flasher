@@ -1,18 +1,14 @@
 # ============================================================
-#  COMPUTER VISION — OpenCV + camera processing
+#  BEGINNER STARTER — Perfect first image for new BBB users
 # ============================================================
 #
 #  What you get:
-#    - OpenCV 4 (Python + C++ bindings)
-#    - Camera capture tools (fswebcam, GStreamer, v4l2)
-#    - Image processing libraries (Pillow, scikit-image, ImageMagick)
-#    - Scientific Python stack (NumPy, SciPy, Matplotlib)
-#    - C/C++ development tools
-#    - ffmpeg for video encoding/decoding
+#    - Python 3 with pip
+#    - Basic shell tools (git, curl, nano, htop…)
+#    - SSH access with a password you choose
 #
-#  Best for: Vision-based robotics, object detection,
-#  colour tracking, lane detection, camera projects.
-#  Connect a standard USB webcam to get started.
+#  Best for: Anyone using a BBB for the very first time.
+#  You can log in with: ssh student@<ip-address>
 #
 schema_version: 1
 board: beaglebone-black
@@ -24,23 +20,18 @@ freeze:
   debian_snapshot: "2026-03-17T00:00:00Z"
 provision_mode: offline
 system:
-  hostname: bbb-vision
+  hostname: bbb-starter
   timezone: UTC
   locale: en_US.UTF-8
 user:
   username: student
-  password: beaglebone
+  password: beaglebone          # Change this! Log in: ssh student@<ip>
   password_locked: false
   authorized_keys: []
 bundles:
   - core-dev
   - python
-  - python-science
-  - cpp
-  - opencv
-  - camera-tools
-  - image-processing
-  - gpio
+  - uart-serial
 apt:
   extra_packages: []
 network:
@@ -48,7 +39,7 @@ network:
   ethernet:
     mode: dhcp
 ssh:
-  disable_password_auth: false
+  disable_password_auth: false   # Password login ON so you can connect easily
   permit_root_login: false
 output:
-  artifact_name: bbb-vision.img.xz
+  artifact_name: bbb-starter.img.xz
