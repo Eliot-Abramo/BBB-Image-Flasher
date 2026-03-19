@@ -1,0 +1,30 @@
+schema_version: 1
+board: beaglebone-black
+base_image:
+  url: https://files.beagle.cc/file/beagleboard-public-2021/images/am335x-debian-13.4-base-v6.18-armhf-2026-03-17-4gb.img.xz
+  sha256: f82f719020014a8455f754ba002238f19a963410edc25d73ac98f380bc3c6d01
+  label: BeagleBone Black Debian 13.4 IoT 2026-03-17
+freeze:
+  debian_snapshot: "2026-03-17T00:00:00Z"
+provision_mode: offline
+system:
+  hostname: bbb-vision-01
+  timezone: UTC
+user:
+  username: maker
+  password_locked: true
+  authorized_keys: []
+bundles:
+  - core-dev
+  - python
+  - cpp
+  - opencv
+apt:
+  extra_packages: []
+network:
+  wifi: null
+ssh:
+  disable_password_auth: true
+  permit_root_login: false
+output:
+  artifact_name: bbb-vision-01.img.xz

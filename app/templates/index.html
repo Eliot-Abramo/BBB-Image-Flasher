@@ -1,0 +1,146 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <title>BBB Image Forge</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <style>
+      body {
+        font-family: Inter, system-ui, sans-serif;
+        max-width: 980px;
+        margin: 2rem auto;
+        padding: 0 1rem;
+        line-height: 1.45;
+      }
+      .card {
+        border: 1px solid #ddd;
+        border-radius: 14px;
+        padding: 1rem;
+        margin-bottom: 1rem;
+      }
+      .grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+        gap: 1rem;
+      }
+      label {
+        display: block;
+        margin-bottom: 0.35rem;
+        font-weight: 600;
+      }
+      input, select, textarea, button {
+        width: 100%;
+        padding: 0.65rem;
+        border-radius: 10px;
+        border: 1px solid #bbb;
+        box-sizing: border-box;
+      }
+      textarea {
+        min-height: 110px;
+        font-family: ui-monospace, monospace;
+      }
+      .bundles label {
+        font-weight: 500;
+        display: flex;
+        gap: 0.5rem;
+        align-items: flex-start;
+      }
+      .bundles input {
+        width: auto;
+        margin-top: 0.2rem;
+      }
+      button {
+        cursor: pointer;
+      }
+      code, pre {
+        font-family: ui-monospace, monospace;
+      }
+      pre {
+        white-space: pre-wrap;
+        background: #f7f7f7;
+        padding: 1rem;
+        border-radius: 12px;
+        border: 1px solid #ddd;
+        overflow-x: auto;
+      }
+      .small {
+        color: #555;
+        font-size: 0.95rem;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>BBB Image Forge</h1>
+    <p>Create a beginner-friendly, ready-to-flash BeagleBone Black image from the official Beagle Debian base image.</p>
+
+    <div class="card">
+      <h2>Official base images</h2>
+      {% if catalog_error %}
+        <p class="small">Could not fetch live catalog: {{ catalog_error }}</p>
+      {% else %}
+        <ul>
+          {% for entry in catalog_entries %}
+            <li><strong>{{ entry.label }}</strong><br><span class="small">{{ entry.image_url }}</span></li>
+          {% endfor %}
+        </ul>
+      {% endif %}
+    </div>
+
+    <form class="card" method="post" action="/manifest">
+      <div class="grid">
+        <div>
+          <label for="profile">Profile</label>
+          <select id="profile" name="profile">
+            {% for profile in profiles %}
+              <option value="{{ profile }}">{{ profile }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div>
+          <label for="hostname">Hostname</label>
+          <input id="hostname" name="hostname" value="bbb-maker-01" required>
+        </div>
+        <div>
+          <label for="username">Username</label>
+          <input id="username" name="username" value="maker" required>
+        </div>
+      </div>
+
+      <div class="card bundles">
+        <h3>Tool bundles</h3>
+        {% for bundle in bundles %}
+          <label>
+            <input type="checkbox" name="bundle_names_selected" value="{{ bundle.name }}">
+            <span><strong>{{ bundle.name }}</strong><br><span class="small">{{ bundle.description }}</span></span>
+          </label>
+        {% endfor %}
+      </div>
+
+      <div class="grid">
+        <label>
+          <input type="checkbox" name="disable_password_auth" checked style="width:auto; margin-right: 0.4rem;">
+          Disable SSH password login
+        </label>
+        <label>
+          <input type="checkbox" name="permit_root_login" style="width:auto; margin-right: 0.4rem;">
+          Permit root SSH login
+        </label>
+      </div>
+
+      <div style="margin-top: 1rem;">
+        <label for="authorized_key">Authorized SSH public key</label>
+        <textarea id="authorized_key" name="authorized_key" placeholder="ssh-ed25519 AAAA..."></textarea>
+      </div>
+
+      <div style="margin-top: 1rem;">
+        <button type="submit">Generate manifest</button>
+      </div>
+    </form>
+
+    <div class="card">
+      <h2>Next step</h2>
+      <p>Save the generated JSON/YAML as a manifest, then run:</p>
+      <pre>sudo python -m app.cli build path/to/manifest.yml</pre>
+    </div>
+  </body>
+</html>
