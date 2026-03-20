@@ -317,8 +317,8 @@
     }
     .warning-box strong { color: #a05800; }
 
-    /* ── Generate button ── */
-    .generate-section {
+    /* ── Build button ── */
+    .build-section {
       background: white;
       border-radius: 16px;
       padding: 1.8rem;
@@ -326,67 +326,93 @@
       box-shadow: 0 2px 12px rgba(0,0,0,0.07);
       text-align: center;
     }
-    .generate-btn {
+    .build-btn {
       display: inline-block;
       padding: 1rem 3rem;
       background: linear-gradient(135deg, #0f6293 0%, #1a8fbf 100%);
       color: white;
       border: none;
       border-radius: 12px;
-      font-size: 1.1rem;
-      font-weight: 700;
+      font-size: 1.15rem;
+      font-weight: 800;
       cursor: pointer;
       transition: transform 0.1s, box-shadow 0.15s;
       box-shadow: 0 4px 14px rgba(15, 98, 147, 0.35);
       width: 100%;
-      max-width: 400px;
+      max-width: 440px;
     }
-    .generate-btn:hover {
-      transform: translateY(-2px);
-      box-shadow: 0 6px 20px rgba(15, 98, 147, 0.45);
-    }
-    .generate-btn:active { transform: translateY(0); }
-    .generate-hint {
-      font-size: 0.85rem;
-      color: #6b8094;
-      margin-top: 0.8rem;
-    }
+    .build-btn:hover { transform: translateY(-2px); box-shadow: 0 6px 20px rgba(15,98,147,0.45); }
+    .build-btn:active { transform: translateY(0); }
+    .build-btn:disabled { background: #adb5bd; box-shadow: none; cursor: not-allowed; transform: none; }
+    .build-hint { font-size: 0.85rem; color: #6b8094; margin-top: 0.8rem; }
 
-    /* ── What happens next ── */
-    .next-steps {
-      background: white;
-      border-radius: 16px;
-      padding: 1.8rem;
-      margin-bottom: 1.5rem;
-      box-shadow: 0 2px 12px rgba(0,0,0,0.07);
+    /* ── How it works ── */
+    .how-it-works {
+      background: white; border-radius: 16px; padding: 1.8rem;
+      margin-bottom: 1.5rem; box-shadow: 0 2px 12px rgba(0,0,0,0.07);
     }
-    .next-steps h2 {
-      font-size: 1.15rem;
-      font-weight: 700;
-      margin-bottom: 1rem;
-    }
+    .how-it-works h2 { font-size: 1.15rem; font-weight: 700; margin-bottom: 1rem; }
     .step-list { list-style: none; }
     .step-list li {
-      display: flex;
-      gap: 0.8rem;
-      padding: 0.6rem 0;
-      border-bottom: 1px solid #eef2f7;
-      font-size: 0.9rem;
+      display: flex; gap: 0.8rem; padding: 0.7rem 0;
+      border-bottom: 1px solid #eef2f7; font-size: 0.9rem; align-items: flex-start;
     }
     .step-list li:last-child { border-bottom: none; }
     .step-num {
-      background: #e8f4fd;
-      color: #0f6293;
-      width: 26px;
-      height: 26px;
-      border-radius: 50%;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      font-size: 0.8rem;
-      font-weight: 700;
-      flex-shrink: 0;
+      background: #e8f4fd; color: #0f6293;
+      width: 28px; height: 28px; border-radius: 50%;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 0.82rem; font-weight: 700; flex-shrink: 0; margin-top: 0.1rem;
     }
+
+    /* ── Build log ── */
+    .build-log-card {
+      background: white; border-radius: 16px; padding: 1.8rem;
+      margin-bottom: 1.5rem; box-shadow: 0 2px 12px rgba(0,0,0,0.07);
+      display: none;
+    }
+    .build-log-header {
+      display: flex; align-items: center; gap: 0.9rem;
+      margin-bottom: 1rem; padding-bottom: 1rem; border-bottom: 2px solid #eef2f7;
+    }
+    .build-log-title { font-size: 1.1rem; font-weight: 700; }
+    .build-log-sub { font-size: 0.85rem; color: #5a7184; margin-top: 0.1rem; }
+    .log-box {
+      background: #0d1117; color: #c9d1d9; border-radius: 10px;
+      padding: 1rem 1.2rem; font-family: ui-monospace, "Cascadia Code", monospace;
+      font-size: 0.82rem; line-height: 1.7; height: 340px;
+      overflow-y: auto; white-space: pre-wrap; word-break: break-word;
+    }
+    .log-box .log-ok   { color: #56d364; }
+    .log-box .log-warn { color: #d29922; }
+    .log-box .log-err  { color: #f85149; }
+
+    /* spinner */
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .spinner {
+      width: 22px; height: 22px; border: 3px solid #d0dbe6;
+      border-top-color: #0f6293; border-radius: 50%;
+      animation: spin 0.8s linear infinite; flex-shrink: 0;
+    }
+    .spinner.done  { border-color: #56d364; border-top-color: #56d364; animation: none; }
+    .spinner.error { border-color: #f85149; border-top-color: #f85149; animation: none; }
+
+    /* ── Done / success bar ── */
+    .success-bar {
+      display: none; margin-top: 1.2rem;
+      background: #e8fdf0; border: 1.5px solid #86efac;
+      border-radius: 12px; padding: 1rem 1.2rem;
+      display: none; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 1rem;
+    }
+    .success-text { font-size: 0.95rem; font-weight: 600; color: #14532d; }
+    .flash-now-btn {
+      padding: 0.65rem 2rem; background: #1f6b2e; color: white;
+      border: none; border-radius: 10px; font-weight: 700; font-size: 0.95rem;
+      cursor: pointer; text-decoration: none; display: inline-block;
+      transition: opacity 0.15s;
+    }
+    .flash-now-btn:hover { opacity: 0.88; }
+
     code {
       background: #eef2f7;
       padding: 0.15rem 0.4rem;
@@ -675,66 +701,77 @@
 
     </div>
 
-    <!-- ── Generate button ── -->
-    <div class="generate-section">
-      <button type="submit" class="generate-btn">Generate My Manifest</button>
-      <div class="generate-hint">
-        This will generate a configuration file (manifest). Save it, then run the build command below to create your image.
+    <!-- ── Build button ── -->
+    <div class="build-section">
+      <button type="button" class="build-btn" id="build-btn" onclick="startBuild()">
+        Build My Image
+      </button>
+      <div class="build-hint">
+        Builds your custom image on this machine — downloads the official BeagleBone Black base image,
+        installs your chosen software, and produces a ready-to-flash file.
+        This takes <strong>10–30 minutes</strong> depending on the packages you picked.
       </div>
     </div>
 
   </form>
 
-  <!-- ── What happens next ── -->
-  <div class="next-steps">
-    <h2>What happens after you click Generate?</h2>
+  <!-- ── How it works ── -->
+  <div class="how-it-works">
+    <h2>How it works</h2>
     <ol class="step-list">
       <li>
         <div class="step-num">1</div>
-        <div>A <strong>manifest file</strong> (JSON) will appear on the next page. Save it as <code>my-bbb.json</code> on your computer.</div>
+        <div>
+          <strong>Fill in the form above and click Build.</strong>
+          The tool downloads the official BeagleBone Black Linux image, installs everything you chose,
+          and produces a <code>.img.xz</code> file — all automatically.
+        </div>
       </li>
       <li>
         <div class="step-num">2</div>
         <div>
-          On a <strong>Linux computer</strong>, install the tool and run the build:
-          <pre>python3 -m venv .venv
-source .venv/bin/activate
-pip install -r requirements.txt
-sudo python -m app.cli build my-bbb.json</pre>
-          This downloads the official BBB image (~1 GB), installs your chosen packages into it, and produces a <code>.img.xz</code> file.
+          <strong>Flash to your SD card.</strong>
+          When the build finishes, click <em>Flash to SD Card</em> and pick your microSD card (8 GB minimum).
+          The tool writes the image directly — no extra software needed.
         </div>
       </li>
       <li>
         <div class="step-num">3</div>
         <div>
-          <strong>Flash the image</strong> to a microSD card (8 GB minimum) using
-          <strong>balenaEtcher</strong> (free, works on Windows/Mac/Linux).
-          Download it from <code>balena.io/etcher</code>.
+          <strong>Boot your BBB.</strong>
+          Insert the card into the BeagleBone Black (slot on the <strong>underside</strong>) and connect the power.
+          The four blue LEDs will do various blink patterns — that's completely normal.
+          Wait about 60 seconds for first boot.
         </div>
       </li>
       <li>
         <div class="step-num">4</div>
         <div>
-          <strong>Insert the SD card</strong> into your BBB, connect an Ethernet cable, and power it on.
-          Wait about 30–60 seconds for it to boot.
-        </div>
-      </li>
-      <li>
-        <div class="step-num">5</div>
-        <div>
-          <strong>Find your BBB's IP address</strong> from your router's admin page (usually <code>192.168.1.1</code>),
-          or use <code>nmap -sn 192.168.1.0/24</code>.
-        </div>
-      </li>
-      <li>
-        <div class="step-num">6</div>
-        <div>
-          <strong>SSH in!</strong> Open a terminal (or PuTTY on Windows) and type:
-          <pre>ssh student@192.168.1.100</pre>
-          Use the password you chose in Step 2. You're in! Your BBB is ready.
+          <strong>Connect via USB (easiest) or Ethernet.</strong><br>
+          <strong>USB:</strong> Plug the mini-USB cable from the BBB into your computer.
+          The BBB shows up as a tiny network adapter — SSH straight to <code>192.168.7.2</code>, no router needed.
+          On Windows, open <strong>PuTTY</strong>, enter <code>192.168.7.2</code>, port 22.<br>
+          <strong>Ethernet:</strong> Plug into your router and find the BBB's IP on your router's admin page,
+          or try <code>ssh student@<em>hostname</em>.local</code>.
         </div>
       </li>
     </ol>
+  </div>
+
+  <!-- ── Build log ── -->
+  <div class="build-log-card" id="build-log-card">
+    <div class="build-log-header">
+      <div class="spinner" id="build-spinner"></div>
+      <div>
+        <div class="build-log-title" id="build-log-title">Building your image…</div>
+        <div class="build-log-sub" id="build-log-sub">Do not close this window. This may take 10–30 minutes.</div>
+      </div>
+    </div>
+    <div class="log-box" id="log-box"></div>
+    <div class="success-bar" id="success-bar">
+      <div class="success-text">Your image is ready!</div>
+      <a class="flash-now-btn" id="flash-now-btn" href="/flash">Flash to SD Card</a>
+    </div>
   </div>
 
   <!-- ── Official images ── -->
@@ -767,14 +804,9 @@ sudo python -m app.cli build my-bbb.json</pre>
     const radio = card ? card.querySelector('input[type="radio"]') : null;
     if (radio) radio.checked = true;
   }
-
-  // Initialise first card as selected on load
   window.addEventListener('DOMContentLoaded', function () {
     const first = document.querySelector('input[type="radio"][name="profile"]:checked');
-    if (first) {
-      const card = first.closest('.profile-card');
-      if (card) card.classList.add('selected');
-    }
+    if (first) { const card = first.closest('.profile-card'); if (card) card.classList.add('selected'); }
   });
 
   // ── Bundle checkbox styling ──
@@ -789,7 +821,6 @@ sudo python -m app.cli build my-bbb.json</pre>
     if (!cb || !lbl) return;
     lbl.classList.toggle('checked', cb.checked);
   }
-  // Prevent double-toggle when clicking the checkbox itself
   document.querySelectorAll('.bundle-item input[type="checkbox"]').forEach(cb => {
     cb.addEventListener('click', function(e) { e.stopPropagation(); updateBundleStyle(this.value); });
   });
@@ -802,6 +833,104 @@ sudo python -m app.cli build my-bbb.json</pre>
     const fields = document.getElementById('static-fields');
     if (mode === 'static') fields.classList.add('visible');
     else fields.classList.remove('visible');
+  }
+
+  // ── Build ──
+  async function startBuild() {
+    const btn = document.getElementById('build-btn');
+    btn.disabled = true;
+    btn.textContent = 'Building…';
+
+    const logCard  = document.getElementById('build-log-card');
+    const logBox   = document.getElementById('log-box');
+    const spinner  = document.getElementById('build-spinner');
+    const titleEl  = document.getElementById('build-log-title');
+    const subEl    = document.getElementById('build-log-sub');
+    const successBar = document.getElementById('success-bar');
+
+    logBox.textContent = '';
+    successBar.style.display = 'none';
+    spinner.className = 'spinner';
+    titleEl.textContent = 'Building your image…';
+    subEl.textContent = 'Do not close this window. This may take 10–30 minutes.';
+    logCard.style.display = 'block';
+    logCard.scrollIntoView({ behavior: 'smooth', block: 'start' });
+
+    const form = document.getElementById('forge-form');
+    const formData = new FormData(form);
+
+    let response;
+    try {
+      response = await fetch('/api/build', { method: 'POST', body: formData });
+    } catch (err) {
+      appendLog(logBox, 'Connection error: ' + err, 'err');
+      setFailed(btn, spinner, titleEl, subEl);
+      return;
+    }
+
+    const reader = response.body.getReader();
+    const decoder = new TextDecoder();
+    let buf = '';
+
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buf += decoder.decode(value, { stream: true });
+      const parts = buf.split('\n');
+      buf = parts.pop();
+      for (const part of parts) {
+        if (!part.startsWith('data: ')) continue;
+        let evt;
+        try { evt = JSON.parse(part.slice(6)); } catch { continue; }
+
+        if (evt.line) appendLog(logBox, evt.line, classForLine(evt.line));
+
+        if (evt.status === 'done') {
+          spinner.className = 'spinner done';
+          titleEl.textContent = 'Build complete!';
+          subEl.textContent = 'Your image is ready to flash.';
+          btn.textContent = 'Rebuild';
+          btn.disabled = false;
+          successBar.style.display = 'flex';
+          if (evt.artifact) {
+            document.getElementById('flash-now-btn').href = '/flash';
+          }
+          logBox.scrollTop = logBox.scrollHeight;
+          return;
+        }
+        if (evt.status === 'error') {
+          setFailed(btn, spinner, titleEl, subEl);
+          return;
+        }
+      }
+    }
+  }
+
+  function appendLog(box, text, cls) {
+    const line = document.createElement('span');
+    if (cls) line.className = 'log-' + cls;
+    line.textContent = text + '\n';
+    box.appendChild(line);
+    // Auto-scroll only if already near the bottom
+    if (box.scrollHeight - box.scrollTop < box.clientHeight + 80) {
+      box.scrollTop = box.scrollHeight;
+    }
+  }
+
+  function classForLine(text) {
+    const t = text.toLowerCase();
+    if (t.includes('error') || t.includes('failed') || t.includes('traceback')) return 'err';
+    if (t.includes('warn') || t.includes('skip')) return 'warn';
+    if (t.includes('done') || t.includes('ok') || t.includes('complete') || t.includes('built')) return 'ok';
+    return null;
+  }
+
+  function setFailed(btn, spinner, titleEl, subEl) {
+    spinner.className = 'spinner error';
+    titleEl.textContent = 'Build failed';
+    subEl.textContent = 'See the log above for details. Fix any issues and try again.';
+    btn.textContent = 'Try Again';
+    btn.disabled = false;
   }
 </script>
 </body>

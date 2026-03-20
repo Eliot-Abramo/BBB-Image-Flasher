@@ -514,13 +514,43 @@ class MountedImage:
             check=True,
         )
         self.loop_device = result.stdout.strip()
-        boot_part = f"{self.loop_device}p1"
-        root_part = f"{self.loop_device}p2"
+
+        root_part, boot_part = self._detect_partitions()
+        if root_part is None:
+            raise BuildError(
+                f"Could not find an ext4 root partition in {self.image_path.name}. "
+                "Run `lsblk -o NAME,FSTYPE` after losetup to inspect the layout."
+            )
 
         subprocess.run(["mount", root_part, str(self.rootfs_mount)], check=True)
-        if Path(boot_part).exists():
+        if boot_part:
             subprocess.run(["mount", boot_part, str(self.boot_mount)], check=True)
         return self
+
+    def _detect_partitions(self) -> tuple[str | None, str | None]:
+        """Probe each partition with blkid and return (rootfs_part, boot_part).
+
+        Handles any number of partitions and any ordering — including images
+        that have a swap partition between boot and rootfs (e.g. the 4 GB
+        BeagleBone Black Debian images which have p1=FAT, p2=swap, p3=ext4).
+        """
+        rootfs = None
+        boot = None
+        for i in range(1, 9):
+            part = f"{self.loop_device}p{i}"
+            if not Path(part).exists():
+                continue
+            result = subprocess.run(
+                ["blkid", "-o", "value", "-s", "TYPE", part],
+                capture_output=True,
+                text=True,
+            )
+            fstype = result.stdout.strip().lower()
+            if fstype == "ext4" and rootfs is None:
+                rootfs = part
+            elif fstype in ("vfat", "fat", "fat16", "fat32") and boot is None:
+                boot = part
+        return rootfs, boot
 
     def __exit__(self, exc_type, exc, tb) -> None:
         for mountpoint in [self.boot_mount, self.rootfs_mount]:

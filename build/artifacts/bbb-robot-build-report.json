@@ -1,0 +1,11 @@
+{
+  "artifact": "/home/eliot/Documents/Sidequests/BBB-Image-Flasher/build/work/bbb-robot.img",
+  "hostname": "bbb-robot",
+  "bundles": [],
+  "resolved_packages": [],
+  "resolved_pip_packages": [],
+  "base_image": "BeagleBone Black Debian 13.4 IoT 2026-03-17",
+  "base_url": "https://files.beagle.cc/file/beagleboard-public-2021/images/am335x-debian-13.4-base-v6.18-armhf-2026-03-17-4gb.img.xz",
+  "snapshot": "2026-03-17T00:00:00Z",
+  "provision_mode": "offline"
+}
