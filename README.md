@@ -34,7 +34,7 @@ You fill in a web form, pick the software you want, and it builds a ready-to-use
 | A microSD card reader | Most laptops have one built in | Or buy a USB card reader for ~£5 |
 | An Ethernet cable | Any spare cable from home | Connects your BBB to your router |
 | A Linux computer | Your own, or a lab machine | Needed to build the image |
-| Python 3.11 or newer | python.org | Usually already installed on Linux |
+| Conda or Miniforge | [conda-forge/miniforge](https://github.com/conda-forge/miniforge) | Used to create the app's private runtime |
 
 > **On Windows or macOS?** You can still build images — use [WSL2](https://learn.microsoft.com/en-us/windows/wsl/install) (Windows Subsystem for Linux) on Windows, or a Linux VM. The web UI works on any OS; the actual image build must run on Linux.
 
@@ -47,13 +47,13 @@ Open a terminal. If you do not know what a terminal is: press `Ctrl + Alt + T` o
 Paste this command and press Enter:
 
 ```bash
-sudo apt-get update && sudo apt-get install -y \
-  git python3 python3-pip python3-venv \
+apt-get update && apt-get install -y \
+  git \
   qemu-user-static xz-utils parted \
   util-linux mount rsync
 ```
 
-> **What is `sudo`?** It means "run this as administrator." Your computer may ask for your password. Type it and press Enter (the cursor will not move while you type — that is normal).
+> **Tip:** If your system requires administrator access to install packages, use your distro's normal package manager workflow.
 
 ---
 
@@ -70,22 +70,20 @@ cd BBB-Image-Flasher
 
 ---
 
-## Step 3 — Set up the Python environment
+## Step 3 — Set up the Conda environment
 
 ```bash
-python3 -m venv .venv
-source .venv/bin/activate
-pip install -r requirements.txt
+./scripts/ensure_conda_env.sh
 ```
 
-> **What is a virtual environment?** It is a self-contained box for Python that keeps this project's libraries separate from everything else on your computer. You will see `(.venv)` at the start of your terminal prompt after running `source .venv/bin/activate` — that means it is active. You need to run that activation command every time you open a new terminal.
+> This creates or updates the app-owned Conda environment in `.bbb-image-forge/conda-env`. You do not need to activate it manually.
 
 ---
 
 ## Step 4 — Start the web interface
 
 ```bash
-python -m app.main
+./scripts/run_dev.sh
 ```
 
 Now open your web browser and go to:
@@ -139,6 +137,7 @@ These are optional extras on top of your chosen profile. Each one shows a descri
 Here is a summary of all available packages:
 
 #### Development Essentials
+
 | Package | What it does |
 |---------|-------------|
 | `core-dev` | git, curl, nano, vim, htop, tmux, tree, bash-completion |
@@ -146,9 +145,10 @@ Here is a summary of all available packages:
 | `debugging-tools` | gdb, valgrind, strace (find and fix bugs) |
 
 #### Programming Languages
+
 | Package | What it does |
 |---------|-------------|
-| `python` | Python 3, pip, venv |
+| `python` | Python 3 and pip |
 | `python-science` | NumPy, SciPy, Pandas, Matplotlib, Seaborn |
 | `python-ml` | scikit-learn, joblib |
 | `cpp` | GCC/G++, CMake, gdb, pkg-config |
@@ -158,6 +158,7 @@ Here is a summary of all available packages:
 | `java` | Java Development Kit (JDK, headless) |
 
 #### Machine Learning & AI
+
 | Package | What it does |
 |---------|-------------|
 | `huggingface` | Transformers, Datasets, Tokenizers (pip install) |
@@ -166,6 +167,7 @@ Here is a summary of all available packages:
 | `ml-nlp` | NLTK, gensim (natural language processing) |
 
 #### Computer Vision
+
 | Package | What it does |
 |---------|-------------|
 | `opencv` | OpenCV 4 — Python + C++ bindings, ffmpeg, v4l2 |
@@ -173,6 +175,7 @@ Here is a summary of all available packages:
 | `image-processing` | Pillow (PIL), ImageMagick, scikit-image |
 
 #### Robotics
+
 | Package | What it does |
 |---------|-------------|
 | `robotics-lite` | screen, minicom, picocom, usbutils, net-tools |
@@ -181,6 +184,7 @@ Here is a summary of all available packages:
 | `robotics-motors` | Adafruit libs for DC motors, steppers, servos (PCA9685) |
 
 #### Hardware Interfaces
+
 | Package | What it does |
 |---------|-------------|
 | `gpio` | gpiod, libgpiod, Python bindings — control BBB pins |
@@ -191,6 +195,7 @@ Here is a summary of all available packages:
 | `adc-sensors` | ADS1x15 ADC libs — read analogue sensors |
 
 #### Networking & IoT
+
 | Package | What it does |
 |---------|-------------|
 | `networking` | nmap, tcpdump, iperf3, traceroute, dnsutils |
@@ -201,12 +206,14 @@ Here is a summary of all available packages:
 | `nodered` | Node-RED visual IoT programming (firstboot install) |
 
 #### Data & Storage
+
 | Package | What it does |
 |---------|-------------|
 | `sqlite` | SQLite database — log sensor data locally |
 | `databases` | MariaDB and Redis client tools |
 
 #### System & Monitoring
+
 | Package | What it does |
 |---------|-------------|
 | `monitoring` | iotop, sysstat, nethogs, dstat |
@@ -218,7 +225,7 @@ Here is a summary of all available packages:
 SSH is how you connect to your BBB remotely from your laptop's terminal.
 
 - **Leave "Disable password login" unchecked** — password login is the easiest option for beginners.
-- **Leave "Allow root SSH login" unchecked** — log in as your user and use `sudo` when you need admin rights.
+- **Leave "Allow root SSH login" unchecked** — log in as your user and use elevated permissions only when needed.
 - **SSH Public Key** — leave blank for now. You can always add one later once you are comfortable.
 
 ### Click Generate
@@ -238,15 +245,15 @@ Or use your browser's "Save Page As" option.
 
 ## Step 6 — Build the image
 
-Go back to your terminal (make sure `.venv` is still active — you should see `(.venv)` at the start of the line).
+Go back to your terminal where `./scripts/run_dev.sh` is still running.
 
 Run:
 
 ```bash
-sudo python -m app.cli build my-bbb.json
+conda run --prefix ./.bbb-image-forge/conda-env python ./bbb_image_forge_cli.py build my-bbb.json
 ```
 
-> **Why `sudo`?** The build process needs administrator rights to mount the disk image (like attaching a virtual hard drive) so it can install software into it.
+> **Why elevated permissions?** The build process may need access to loop devices or disk images so it can modify the image filesystem.
 
 The build process will:
 
@@ -295,20 +302,25 @@ SSH (Secure Shell) is how you type commands on your BBB from your laptop.
 Your BBB got an IP address from your router automatically. To find it:
 
 **Option A — Check your router's admin page**
+
 - Open a browser and go to `192.168.1.1` (or `192.168.0.1` — try both)
 - Log in with your router's admin password (often on a sticker on the router)
 - Look for a list of connected devices — your BBB will appear as `bbb-robot` (or whatever hostname you chose)
 
 **Option B — Scan the network**
+
 ```bash
 nmap -sn 192.168.1.0/24
 ```
+
 Change `192.168.1` to match your network. Look for a device named after your hostname.
 
 **Option C — Try the hostname directly**
+
 ```bash
 ssh student@bbb-robot.local
 ```
+
 This works on most home networks without needing to know the IP address.
 
 ### SSH in
@@ -394,8 +406,8 @@ sudo poweroff
 
 ### "The build failed"
 
-- Make sure you ran the build with `sudo`
-- Make sure `qemu-user-static` is installed: `sudo apt-get install qemu-user-static`
+- Make sure the build completed with enough access to open and modify disk images
+- Make sure `qemu-user-static` is installed: `apt-get install qemu-user-static`
 - Check you have enough disk space: `df -h` (you need at least 10 GB free)
 
 ### "The image is too big for my SD card"
@@ -428,9 +440,11 @@ You can install packages directly on the BBB once connected: `sudo apt-get insta
 
 **Can I write my Python scripts on my laptop and run them on the BBB?**
 Yes! Use `scp` to copy files:
+
 ```bash
 scp my_script.py student@192.168.1.100:~/
 ```
+
 Or use VS Code with the Remote-SSH extension to edit files on the BBB directly from your laptop.
 
 **What is the BBB's default login if I do not change anything?**
@@ -480,23 +494,23 @@ If you prefer the command line over the web interface:
 
 ```bash
 # List available profiles
-python -m app.cli list-profiles
+conda run --prefix ./.bbb-image-forge/conda-env python ./bbb_image_forge_cli.py list-profiles
 
 # List official base images from beagleboard.org
-python -m app.cli list-base-images
+conda run --prefix ./.bbb-image-forge/conda-env python ./bbb_image_forge_cli.py list-base-images
 
 # Generate a manifest from a profile
-python -m app.cli generate-manifest \
+conda run --prefix ./.bbb-image-forge/conda-env python ./bbb_image_forge_cli.py generate-manifest \
   --profile robotics_starter \
   --hostname bbb-robot \
   --username student \
   --output my-bbb.json
 
-# Build an image from a manifest (requires sudo)
-sudo python -m app.cli build my-bbb.json
+# Build an image from a manifest
+conda run --prefix ./.bbb-image-forge/conda-env python ./bbb_image_forge_cli.py build my-bbb.json
 
 # Validate a manifest file
-python -m app.cli validate my-bbb.json
+conda run --prefix ./.bbb-image-forge/conda-env python ./bbb_image_forge_cli.py validate my-bbb.json
 ```
 
 ---
@@ -519,7 +533,7 @@ The whole process runs offline on your computer — the BBB's first boot is inst
 
 ## Safety notes
 
-- The build process requires `sudo` because it mounts disk images. Do not run untrusted manifests.
+- The build process requires permission to mount and modify disk images. Do not run untrusted manifests.
 - Password set in the manifest is stored in plaintext in the JSON file. Do not commit manifest files with real passwords to public git repositories.
 - The default password `beaglebone` is publicly known — change it as soon as you can.
 

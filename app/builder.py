@@ -15,14 +15,19 @@ from app.manifests import resolved_package_list
 from app.models import ManifestModel
 
 
+PROJECT_ROOT = Path(__file__).resolve().parent.parent
+
+
 class BuildError(RuntimeError):
     pass
 
 
 class ImageBuilder:
-    def __init__(self, manifest: ManifestModel, workspace: str | Path = "build") -> None:
+    def __init__(
+        self, manifest: ManifestModel, workspace: str | Path = "build"
+    ) -> None:
         self.manifest = manifest
-        self.workspace = Path(workspace).resolve()
+        self.workspace = self._resolve_workspace(workspace)
         self.workspace.mkdir(parents=True, exist_ok=True)
         self.download_dir = self.workspace / "downloads"
         self.output_dir = self.workspace / "artifacts"
@@ -31,11 +36,20 @@ class ImageBuilder:
         self.output_dir.mkdir(parents=True, exist_ok=True)
         self.work_dir.mkdir(parents=True, exist_ok=True)
 
+    @staticmethod
+    def _resolve_workspace(workspace: str | Path) -> Path:
+        workspace_path = Path(workspace)
+        if workspace_path.is_absolute():
+            return workspace_path.resolve()
+        return (PROJECT_ROOT / workspace_path).resolve()
+
     def build(self) -> Path:
         compressed = self._download_base_image()
         self._verify_sha256(compressed, self.manifest.base_image.sha256)
         raw_image = self._decompress_image(compressed)
-        custom_image = self.work_dir / self.manifest.output.artifact_name.replace(".xz", "")
+        custom_image = self.work_dir / self.manifest.output.artifact_name.replace(
+            ".xz", ""
+        )
         shutil.copy2(raw_image, custom_image)
 
         if self.manifest.provision_mode == "offline":
@@ -59,7 +73,9 @@ class ImageBuilder:
             print(f"Using cached base image: {target}")
             return target
         print(f"Downloading base image from {self.manifest.base_image.url} …")
-        with requests.get(str(self.manifest.base_image.url), stream=True, timeout=60) as response:
+        with requests.get(
+            str(self.manifest.base_image.url), stream=True, timeout=60
+        ) as response:
             response.raise_for_status()
             with target.open("wb") as handle:
                 for chunk in response.iter_content(chunk_size=1024 * 1024):
@@ -148,14 +164,22 @@ class ImageBuilder:
         user = self.manifest.user.username
         self._run_in_chroot(
             rootfs,
-            ["bash", "-lc", f"id -u {user} >/dev/null 2>&1 || useradd -m -s /bin/bash {user}"],
+            [
+                "bash",
+                "-lc",
+                f"id -u {user} >/dev/null 2>&1 || useradd -m -s /bin/bash {user}",
+            ],
         )
 
         # Add user to common groups (gpio, i2c, spi, dialout for serial)
         for group in ("sudo", "dialout", "gpio", "i2c", "spi"):
             self._run_in_chroot(
                 rootfs,
-                ["bash", "-c", f"getent group {group} >/dev/null && usermod -aG {group} {user} || true"],
+                [
+                    "bash",
+                    "-c",
+                    f"getent group {group} >/dev/null && usermod -aG {group} {user} || true",
+                ],
             )
 
         # Password — prefer explicit password over locked account
@@ -178,7 +202,9 @@ class ImageBuilder:
         )
         os.chmod(ssh_dir, 0o700)
         os.chmod(authorized_keys, 0o600)
-        self._run_in_chroot(rootfs, ["chown", "-R", f"{user}:{user}", f"/home/{user}/.ssh"])
+        self._run_in_chroot(
+            rootfs, ["chown", "-R", f"{user}:{user}", f"/home/{user}/.ssh"]
+        )
 
         # Timezone
         (rootfs / "etc/timezone").write_text(
@@ -245,7 +271,9 @@ class ImageBuilder:
             f'network={{\n    ssid="{wifi.ssid}"\n    psk="{wifi.psk}"\n}}\n',
             encoding="utf-8",
         )
-        self._run_in_chroot(rootfs, ["systemctl", "enable", "wpa_supplicant@wlan0.service"])
+        self._run_in_chroot(
+            rootfs, ["systemctl", "enable", "wpa_supplicant@wlan0.service"]
+        )
         self._run_in_chroot(rootfs, ["systemctl", "enable", "systemd-networkd.service"])
 
     # ------------------------------------------------------------------
@@ -276,7 +304,8 @@ class ImageBuilder:
         self._run_in_chroot(
             rootfs,
             [
-                "pip3", "install",
+                "pip3",
+                "install",
                 "--break-system-packages",
                 "--no-cache-dir",
                 *pip_packages,
@@ -434,7 +463,9 @@ class ImageBuilder:
             "snapshot": self.manifest.freeze.debian_snapshot,
             "provision_mode": self.manifest.provision_mode,
         }
-        report_path = self.output_dir / f"{self.manifest.system.hostname}-build-report.json"
+        report_path = (
+            self.output_dir / f"{self.manifest.system.hostname}-build-report.json"
+        )
         report_path.write_text(json.dumps(report, indent=2), encoding="utf-8")
         return report_path
 
@@ -451,17 +482,25 @@ class ImageBuilder:
     ) -> None:
         self._bind_mounts(rootfs)
         try:
-            base_cmd = ["chroot", str(rootfs), *command]
+            if command and command[0] == "systemctl":
+                base_cmd = ["systemctl", "--root", str(rootfs), *command[1:]]
+            else:
+                base_cmd = ["chroot", str(rootfs), *command]
             self._run(base_cmd, env=env, stdin_input=stdin_input)
         finally:
             self._unbind_mounts(rootfs)
 
     def _bind_mounts(self, rootfs: Path) -> None:
-        for src, dst in [("/proc", "proc"), ("/sys", "sys"), ("/dev", "dev"), ("/run", "run")]:
+        for src, dst in [
+            ("/proc", "proc"),
+            ("/sys", "sys"),
+            ("/dev", "dev"),
+            ("/run", "run"),
+        ]:
             target = rootfs / dst
             target.mkdir(parents=True, exist_ok=True)
             if not self._is_mountpoint(target):
-                self._run(["mount", "--bind", src, str(target)])
+                self._run(["mount", "--rbind", src, str(target)])
 
     def _unbind_mounts(self, rootfs: Path) -> None:
         for dst in ["run", "dev", "sys", "proc"]:
@@ -494,6 +533,7 @@ class ImageBuilder:
 # ---------------------------------------------------------------------------
 # Context manager for loop-mounting a BBB .img file
 # ---------------------------------------------------------------------------
+
 
 class MountedImage:
     def __init__(self, image_path: Path) -> None:

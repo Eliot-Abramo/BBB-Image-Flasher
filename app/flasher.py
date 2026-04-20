@@ -1,11 +1,12 @@
-"""
+r"""
 flasher.py — cross-platform SD card detection and raw-image writing.
 
 Windows:  drives listed via PowerShell Get-Disk; written to \\.\PhysicalDriveN
-          (requires the server to be running as Administrator)
+          (requires write access to the raw device)
 Linux:    drives listed via lsblk; written to /dev/sdX
-          (requires the server to be running with sudo / as root)
+          (requires write access to the raw device)
 """
+
 from __future__ import annotations
 
 import json
@@ -27,16 +28,17 @@ _CHUNK = 4 * 1024 * 1024
 # Data model
 # ──────────────────────────────────────────────────────────────────────────────
 
+
 @dataclass
 class DriveInfo:
-    device: str       # "\\.\PhysicalDrive2"  or  "/dev/sdb"
-    label: str        # Human-readable model name
+    device: str  # "\\.\PhysicalDrive2"  or  "/dev/sdb"
+    label: str  # Human-readable model name
     size_bytes: int
-    bus_type: str     # USB, SD, MMC, …
+    bus_type: str  # USB, SD, MMC, …
 
     @property
     def size_human(self) -> str:
-        gb = self.size_bytes / (1024 ** 3)
+        gb = self.size_bytes / (1024**3)
         return f"{gb:.1f} GB" if gb >= 1 else f"{self.size_bytes // (1024 ** 2)} MB"
 
     def as_dict(self) -> dict:
@@ -53,12 +55,15 @@ class DriveInfo:
 # Admin / privilege detection
 # ──────────────────────────────────────────────────────────────────────────────
 
+
 def is_admin() -> bool:
     """Return True if the current process has the privileges needed to write
-    to a raw disk device (Administrator on Windows, root on Linux)."""
+    to a raw disk device (requires write access to the raw device).
+    """
     try:
         if platform.system() == "Windows":
             import ctypes
+
             return bool(ctypes.windll.shell32.IsUserAnAdmin())
         return __import__("os").geteuid() == 0
     except Exception:
@@ -71,19 +76,19 @@ def admin_instructions() -> str:
         return (
             "Right-click on <strong>Command Prompt</strong> or "
             "<strong>PowerShell</strong> and choose "
-            "<strong>\"Run as administrator\"</strong>, then restart the "
+            '<strong>"Run as administrator"</strong>, then restart the '
             "server from that elevated window."
         )
     return (
-        "Stop the server and restart it with <strong>sudo</strong>.<br>"
-        "If you use Anaconda/conda, preserve your PATH so the right Python is used:<br>"
-        "<code>sudo env PATH=\"$PATH\" python3 -m app.main</code>"
+        "Ensure this process has write access to the raw disk device. "
+        "If needed, adjust udev permissions or otherwise run the app with elevated privileges."
     )
 
 
 # ──────────────────────────────────────────────────────────────────────────────
 # Drive detection
 # ──────────────────────────────────────────────────────────────────────────────
+
 
 def list_drives() -> list[DriveInfo]:
     """Return removable / external drives suitable for SD card flashing."""
@@ -108,7 +113,9 @@ def _list_drives_windows() -> list[DriveInfo]:
     try:
         result = subprocess.run(
             ["powershell", "-NoProfile", "-NonInteractive", "-Command", script],
-            capture_output=True, text=True, timeout=15,
+            capture_output=True,
+            text=True,
+            timeout=15,
         )
     except FileNotFoundError:
         # PowerShell not on PATH — fall back to wmic
@@ -119,7 +126,7 @@ def _list_drives_windows() -> list[DriveInfo]:
         return []
 
     data = json.loads(raw)
-    if isinstance(data, dict):          # single result — PowerShell omits the array
+    if isinstance(data, dict):  # single result — PowerShell omits the array
         data = [data]
 
     drives: list[DriveInfo] = []
@@ -128,12 +135,14 @@ def _list_drives_windows() -> list[DriveInfo]:
         size = int(d.get("Size") or 0)
         if number is None or size == 0:
             continue
-        drives.append(DriveInfo(
-            device=f"\\\\.\\PhysicalDrive{number}",
-            label=d.get("FriendlyName") or f"Disk {number}",
-            size_bytes=size,
-            bus_type=d.get("BusType") or "USB",
-        ))
+        drives.append(
+            DriveInfo(
+                device=f"\\\\.\\PhysicalDrive{number}",
+                label=d.get("FriendlyName") or f"Disk {number}",
+                size_bytes=size,
+                bus_type=d.get("BusType") or "USB",
+            )
+        )
     return drives
 
 
@@ -142,12 +151,17 @@ def _list_drives_windows_wmic() -> list[DriveInfo]:
     try:
         result = subprocess.run(
             [
-                "wmic", "diskdrive",
-                "where", "MediaType='Removable Media' or InterfaceType='USB'",
-                "get", "DeviceID,Model,Size,InterfaceType",
+                "wmic",
+                "diskdrive",
+                "where",
+                "MediaType='Removable Media' or InterfaceType='USB'",
+                "get",
+                "DeviceID,Model,Size,InterfaceType",
                 "/format:csv",
             ],
-            capture_output=True, text=True, timeout=15,
+            capture_output=True,
+            text=True,
+            timeout=15,
         )
     except Exception:
         return []
@@ -165,12 +179,14 @@ def _list_drives_windows_wmic() -> list[DriveInfo]:
         if not device_id or size == 0:
             continue
         # wmic DeviceID is already like \\.\PHYSICALDRIVE2
-        drives.append(DriveInfo(
-            device=device_id,
-            label=model.strip() or device_id,
-            size_bytes=size,
-            bus_type=iface.strip() or "USB",
-        ))
+        drives.append(
+            DriveInfo(
+                device=device_id,
+                label=model.strip() or device_id,
+                size_bytes=size,
+                bus_type=iface.strip() or "USB",
+            )
+        )
     return drives
 
 
@@ -179,7 +195,9 @@ def _list_drives_linux() -> list[DriveInfo]:
     try:
         result = subprocess.run(
             ["lsblk", "-J", "-b", "-o", "NAME,SIZE,TYPE,TRAN,MODEL,RM"],
-            capture_output=True, text=True, timeout=10,
+            capture_output=True,
+            text=True,
+            timeout=10,
         )
     except FileNotFoundError:
         return []
@@ -202,18 +220,21 @@ def _list_drives_linux() -> list[DriveInfo]:
         if not name or size == 0:
             continue
         model = (dev.get("model") or "").strip() or name
-        drives.append(DriveInfo(
-            device=f"/dev/{name}",
-            label=model,
-            size_bytes=size,
-            bus_type=tran.upper() or "USB",
-        ))
+        drives.append(
+            DriveInfo(
+                device=f"/dev/{name}",
+                label=model,
+                size_bytes=size,
+                bus_type=tran.upper() or "USB",
+            )
+        )
     return drives
 
 
 # ──────────────────────────────────────────────────────────────────────────────
 # Flashing
 # ──────────────────────────────────────────────────────────────────────────────
+
 
 def flash_image(image_path: Path, device: str) -> Iterator[dict]:
     """Decompress *image_path* (.img.xz) and write it to *device* in streaming
@@ -273,22 +294,24 @@ def flash_image(image_path: Path, device: str) -> Iterator[dict]:
     except PermissionError:
         yield _err(
             written,
-            "Permission denied — the server needs administrator/root privileges "
-            "to write to a raw disk.  "
+            "Permission denied — this process does not have write access to the raw disk device. "
             + admin_instructions(),
         )
         return
 
     except OSError as exc:
         code = getattr(exc, "winerror", None) or exc.errno
-        if code == 5:   # Windows ERROR_ACCESS_DENIED
+        if code == 5:  # Windows ERROR_ACCESS_DENIED
             yield _err(
                 written,
                 "Access denied (error 5).  Make sure the server is running as "
                 "Administrator and that no other program is using the drive.",
             )
         elif code == 19:  # Windows ERROR_WRITE_PROTECT
-            yield _err(written, "The SD card is write-protected.  Check the physical lock switch on the card.")
+            yield _err(
+                written,
+                "The SD card is write-protected.  Check the physical lock switch on the card.",
+            )
         else:
             yield _err(written, f"OS error while writing: {exc}")
         return
@@ -322,6 +345,7 @@ def _err(written: int, message: str) -> dict:
 # Safe eject
 # ──────────────────────────────────────────────────────────────────────────────
 
+
 def eject_drive(device: str) -> str:
     """Attempt a safe eject/unmount.  Returns a human-readable status string."""
     if platform.system() == "Windows":
@@ -345,7 +369,8 @@ def _eject_windows(device: str) -> str:
         )
         subprocess.run(
             ["powershell", "-NoProfile", "-NonInteractive", "-Command", script],
-            capture_output=True, timeout=10,
+            capture_output=True,
+            timeout=10,
         )
     except Exception:
         pass
@@ -368,7 +393,9 @@ def _eject_linux(device: str) -> str:
         try:
             subprocess.run(
                 ["udisksctl", "power-off", "-b", device],
-                capture_output=True, timeout=15, check=False,
+                capture_output=True,
+                timeout=15,
+                check=False,
             )
             return "Drive powered off. Safe to unplug."
         except Exception:

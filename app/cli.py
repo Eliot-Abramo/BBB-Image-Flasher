@@ -1,11 +1,13 @@
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
 import typer
 
 from app.builder import ImageBuilder
 from app.catalog import BeagleCatalog
+from app.flasher import eject_drive, flash_image, list_drives
 from app.manifests import load_manifest, save_manifest
 from app.models import ManifestModel
 from app.profiles import available_profiles, instantiate_profile
@@ -62,6 +64,25 @@ def validate(manifest_path: Path = typer.Argument(..., help="Manifest YAML file"
     manifest = load_manifest(manifest_path)
     ManifestModel.model_validate(manifest.model_dump())
     typer.echo("Manifest is valid.")
+
+
+@cli.command("list-drives-json")
+def list_drives_json() -> None:
+    print(json.dumps([drive.as_dict() for drive in list_drives()]), flush=True)
+
+
+@cli.command("flash-json")
+def flash_json(
+    image: Path = typer.Argument(..., help="Path to the .img.xz artifact"),
+    device: str = typer.Argument(..., help="Raw device path, for example /dev/sdb"),
+) -> None:
+    for progress in flash_image(image, device):
+        print(json.dumps(progress), flush=True)
+
+
+@cli.command("eject")
+def eject_cli(device: str = typer.Argument(..., help="Raw device path")) -> None:
+    print(eject_drive(device), flush=True)
 
 
 if __name__ == "__main__":

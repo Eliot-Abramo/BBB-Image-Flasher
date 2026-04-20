@@ -4,6 +4,8 @@ import asyncio
 import json
 import os
 import platform
+import shutil
+import subprocess
 import sys
 import tempfile
 from concurrent.futures import ThreadPoolExecutor
@@ -16,13 +18,22 @@ from fastapi.templating import Jinja2Templates
 
 from app.bundles import BUNDLES, bundle_names, bundles_by_category
 from app.catalog import BeagleCatalog, CatalogError
-from app.flasher import admin_instructions, eject_drive, flash_image, is_admin, list_drives
+from app.flasher import (
+    admin_instructions,
+    eject_drive,
+    flash_image,
+    is_admin,
+    list_drives,
+)
 from app.manifests import save_manifest
 from app.models import ManifestModel
 from app.profiles import available_profiles, instantiate_profile
 
 
 BASE_DIR = Path(__file__).resolve().parent
+PROJECT_ROOT = BASE_DIR.parent
+MANAGED_CONDA_ENV = PROJECT_ROOT / ".bbb-image-forge" / "conda-env"
+CLI_WRAPPER = PROJECT_ROOT / "bbb_image_forge_cli.py"
 app = FastAPI(title="BBB Image Forge")
 templates = Jinja2Templates(directory=str(BASE_DIR / "templates"))
 
@@ -31,9 +42,22 @@ _flash_executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix="flash")
 _CATALOG_TIMEOUT = 6.0
 
 
+def _managed_python() -> str:
+    if platform.system() == "Linux":
+        candidate = MANAGED_CONDA_ENV / "bin" / "python"
+        if candidate.exists():
+            return str(candidate)
+    return sys.executable
+
+
+def _cli_command(*args: str, privileged: bool = False) -> list[str]:
+    return [_managed_python(), "-u", str(CLI_WRAPPER), *args]
+
+
 # ──────────────────────────────────────────────────────────────────────────────
 # Main page
 # ──────────────────────────────────────────────────────────────────────────────
+
 
 @app.get("/", response_class=HTMLResponse)
 async def index(request: Request):
@@ -65,6 +89,9 @@ async def index(request: Request):
             "bundles_by_category": bundles_by_category(),
             "catalog_entries": catalog_entries,
             "catalog_error": catalog_error,
+            "artifacts": [str(a) for a in _find_artifacts()],
+            "os_name": platform.system(),
+            "running_as_admin": is_admin(),
         },
     )
 
@@ -72,6 +99,7 @@ async def index(request: Request):
 # ──────────────────────────────────────────────────────────────────────────────
 # Manifest generation
 # ──────────────────────────────────────────────────────────────────────────────
+
 
 @app.post("/manifest", response_class=PlainTextResponse)
 def manifest(
@@ -100,7 +128,9 @@ def manifest(
 
     network_config: dict = {}
     if ip_mode == "static" and static_address.strip():
-        dns_list = [s.strip() for s in static_dns.replace(",", " ").split() if s.strip()]
+        dns_list = [
+            s.strip() for s in static_dns.replace(",", " ").split() if s.strip()
+        ]
         network_config["ethernet"] = {
             "mode": "static",
             "static": {
@@ -161,14 +191,13 @@ async def api_build(
     """
     # ── Privilege check ──────────────────────────────────────────────────────
     if platform.system() != "Linux":
+
         async def _no_linux():
             yield f"data: {json.dumps({'status': 'error', 'line': 'Image building requires a Linux host (uses losetup / mount / chroot). The server is currently running on ' + platform.system() + '.'})}\n\n"
-        return StreamingResponse(_no_linux(), media_type="text/event-stream", headers=_SSE_HEADERS)
 
-    if not is_admin():
-        async def _no_root():
-            yield f"data: {json.dumps({'status': 'error', 'line': 'The server must be running as root to build images (needs losetup, mount, chroot). Restart with: sudo env PATH=\"$PATH\" python3 -m app.main'})}\n\n"
-        return StreamingResponse(_no_root(), media_type="text/event-stream", headers=_SSE_HEADERS)
+        return StreamingResponse(
+            _no_linux(), media_type="text/event-stream", headers=_SSE_HEADERS
+        )
 
     # ── Build the manifest model ─────────────────────────────────────────────
     user_config: dict = {
@@ -183,7 +212,9 @@ async def api_build(
 
     network_config: dict = {}
     if ip_mode == "static" and static_address.strip():
-        dns_list = [s.strip() for s in static_dns.replace(",", " ").split() if s.strip()]
+        dns_list = [
+            s.strip() for s in static_dns.replace(",", " ").split() if s.strip()
+        ]
         network_config["ethernet"] = {
             "mode": "static",
             "static": {
@@ -211,7 +242,9 @@ async def api_build(
     # ── Save manifest to a temp file ─────────────────────────────────────────
     fd, tmp_path = tempfile.mkstemp(suffix=".json", prefix="bbb-forge-")
     try:
-        os.write(fd, json.dumps(manifest_model.model_dump(mode="json"), indent=2).encode())
+        os.write(
+            fd, json.dumps(manifest_model.model_dump(mode="json"), indent=2).encode()
+        )
     finally:
         os.close(fd)
 
@@ -221,8 +254,10 @@ async def api_build(
     async def _generate():
         proc = None
         try:
+            command = _cli_command("build", tmp_path)
             proc = await asyncio.create_subprocess_exec(
-                sys.executable, "-m", "app.cli", "build", tmp_path,
+                *command,
+                cwd=str(PROJECT_ROOT),
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.STDOUT,
             )
@@ -247,12 +282,15 @@ async def api_build(
             if proc and proc.returncode is None:
                 proc.kill()
 
-    return StreamingResponse(_generate(), media_type="text/event-stream", headers=_SSE_HEADERS)
+    return StreamingResponse(
+        _generate(), media_type="text/event-stream", headers=_SSE_HEADERS
+    )
 
 
 # ──────────────────────────────────────────────────────────────────────────────
 # Flash page
 # ──────────────────────────────────────────────────────────────────────────────
+
 
 def _find_artifacts() -> list[Path]:
     """Return .img.xz files from build/artifacts/, newest first."""
@@ -269,7 +307,7 @@ def _find_artifacts() -> list[Path]:
 @app.get("/flash", response_class=HTMLResponse)
 async def flash_page(request: Request):
     admin = is_admin()
-    os_name = platform.system()       # "Windows" | "Linux" | "Darwin"
+    os_name = platform.system()  # "Windows" | "Linux" | "Darwin"
     artifacts = _find_artifacts()
     return templates.TemplateResponse(
         request,
@@ -286,6 +324,7 @@ async def flash_page(request: Request):
 # ──────────────────────────────────────────────────────────────────────────────
 # Flash API
 # ──────────────────────────────────────────────────────────────────────────────
+
 
 @app.get("/api/drives")
 async def api_drives():
@@ -322,10 +361,15 @@ async def api_flash(
                 asyncio.run_coroutine_threadsafe(queue.put(progress), loop)
         except Exception as exc:
             asyncio.run_coroutine_threadsafe(
-                queue.put({
-                    "written": 0, "percent": 0, "speed_mb": 0.0,
-                    "status": "error", "message": str(exc),
-                }),
+                queue.put(
+                    {
+                        "written": 0,
+                        "percent": 0,
+                        "speed_mb": 0.0,
+                        "status": "error",
+                        "message": str(exc),
+                    }
+                ),
                 loop,
             )
         finally:
@@ -345,11 +389,7 @@ async def api_flash(
     return StreamingResponse(
         _generate(),
         media_type="text/event-stream",
-        headers={
-            "Cache-Control": "no-cache",
-            "X-Accel-Buffering": "no",
-            "Connection": "keep-alive",
-        },
+        headers=_SSE_HEADERS,
     )
 
 
@@ -370,6 +410,7 @@ async def api_eject(device: str = Query(...)):
 # ──────────────────────────────────────────────────────────────────────────────
 # Health check
 # ──────────────────────────────────────────────────────────────────────────────
+
 
 @app.get("/healthz", response_class=PlainTextResponse)
 def healthz():
