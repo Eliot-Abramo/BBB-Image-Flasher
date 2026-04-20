@@ -2,7 +2,3 @@
 __pycache__/
 *.xz
 work/
-.bbb-image-forge/
-.env.github-actions
-app/__pycache__/
-tests/__pycache__/

@@ -1,38 +1,43 @@
 """
-flasher.py — safe removable-media detection and raw-image writing helpers.
+flasher.py — cross-platform SD card detection and raw-image writing.
 
-The desktop controller should stay unprivileged. These operations are intended
-to be invoked through the helper process so the UI never needs to run as root.
+Windows:  drives listed via PowerShell Get-Disk; written to \\.\PhysicalDriveN
+          (requires the server to be running as Administrator)
+Linux:    drives listed via lsblk; written to /dev/sdX
+          (requires the server to be running with sudo / as root)
 """
 from __future__ import annotations
 
 import json
 import lzma
-import os
 import platform
 import subprocess
 import time
-from dataclasses import dataclass
+from dataclasses import asdict, dataclass
 from pathlib import Path
-from typing import Iterable, Iterator
-
-from app.models import DeviceRecordModel
+from typing import Iterator
 
 
+# Write in 4 MB chunks — satisfies the 512-byte sector-alignment
+# requirement on Windows raw-disk writes.
 _CHUNK = 4 * 1024 * 1024
 
 
-@dataclass(slots=True)
+# ──────────────────────────────────────────────────────────────────────────────
+# Data model
+# ──────────────────────────────────────────────────────────────────────────────
+
+@dataclass
 class DriveInfo:
-    device: str
-    label: str
+    device: str       # "\\.\PhysicalDrive2"  or  "/dev/sdb"
+    label: str        # Human-readable model name
     size_bytes: int
-    bus_type: str
+    bus_type: str     # USB, SD, MMC, …
 
     @property
     def size_human(self) -> str:
-        gb = self.size_bytes / (1024**3)
-        return f"{gb:.1f} GB" if gb >= 1 else f"{self.size_bytes // (1024**2)} MB"
+        gb = self.size_bytes / (1024 ** 3)
+        return f"{gb:.1f} GB" if gb >= 1 else f"{self.size_bytes // (1024 ** 2)} MB"
 
     def as_dict(self) -> dict:
         return {
@@ -44,210 +49,263 @@ class DriveInfo:
         }
 
 
+# ──────────────────────────────────────────────────────────────────────────────
+# Admin / privilege detection
+# ──────────────────────────────────────────────────────────────────────────────
+
 def is_admin() -> bool:
+    """Return True if the current process has the privileges needed to write
+    to a raw disk device (Administrator on Windows, root on Linux)."""
     try:
         if platform.system() == "Windows":
             import ctypes
-
             return bool(ctypes.windll.shell32.IsUserAnAdmin())
-        return os.geteuid() == 0
+        return __import__("os").geteuid() == 0
     except Exception:
         return False
 
 
 def admin_instructions() -> str:
+    """Plain-English fix for the current platform."""
     if platform.system() == "Windows":
         return (
-            "Restart the installed helper with Administrator privileges. "
-            "The main app does not need to run elevated."
+            "Right-click on <strong>Command Prompt</strong> or "
+            "<strong>PowerShell</strong> and choose "
+            "<strong>\"Run as administrator\"</strong>, then restart the "
+            "server from that elevated window."
         )
     return (
-        "Make sure the installed helper/service has the privileges it needs to access "
-        "raw disks and mounted images. The main app should remain unprivileged."
+        "Stop the server and restart it with <strong>sudo</strong>.<br>"
+        "If you use Anaconda/conda, preserve your PATH so the right Python is used:<br>"
+        "<code>sudo env PATH=\"$PATH\" python3 -m app.main</code>"
     )
 
 
-def list_candidate_devices() -> list[DeviceRecordModel]:
-    if platform.system() == "Windows":
-        return _list_devices_windows()
-    return _list_devices_linux()
-
+# ──────────────────────────────────────────────────────────────────────────────
+# Drive detection
+# ──────────────────────────────────────────────────────────────────────────────
 
 def list_drives() -> list[DriveInfo]:
-    drives: list[DriveInfo] = []
-    for device in list_candidate_devices():
-        if not device.removable:
-            continue
-        drives.append(
-            DriveInfo(
-                device=device.device_path,
-                label=device.label,
-                size_bytes=device.size_bytes,
-                bus_type=device.transport or "USB",
-            )
+    """Return removable / external drives suitable for SD card flashing."""
+    if platform.system() == "Windows":
+        return _list_drives_windows()
+    return _list_drives_linux()
+
+
+def _list_drives_windows() -> list[DriveInfo]:
+    """Use PowerShell Get-Disk to enumerate USB/SD/MMC disks.
+
+    Deliberately excludes the boot disk, the system disk, and anything
+    whose BusType is not obviously removable.
+    """
+    script = (
+        "Get-Disk | "
+        "Where-Object { -not $_.IsBoot -and -not $_.IsSystem -and "
+        "               $_.BusType -in @('USB','SD','MMC','SDIO','1394') } | "
+        "Select-Object Number, FriendlyName, Size, BusType | "
+        "ConvertTo-Json -Compress -Depth 3"
+    )
+    try:
+        result = subprocess.run(
+            ["powershell", "-NoProfile", "-NonInteractive", "-Command", script],
+            capture_output=True, text=True, timeout=15,
         )
+    except FileNotFoundError:
+        # PowerShell not on PATH — fall back to wmic
+        return _list_drives_windows_wmic()
+
+    raw = result.stdout.strip()
+    if not raw:
+        return []
+
+    data = json.loads(raw)
+    if isinstance(data, dict):          # single result — PowerShell omits the array
+        data = [data]
+
+    drives: list[DriveInfo] = []
+    for d in data:
+        number = d.get("Number")
+        size = int(d.get("Size") or 0)
+        if number is None or size == 0:
+            continue
+        drives.append(DriveInfo(
+            device=f"\\\\.\\PhysicalDrive{number}",
+            label=d.get("FriendlyName") or f"Disk {number}",
+            size_bytes=size,
+            bus_type=d.get("BusType") or "USB",
+        ))
     return drives
 
 
-def device_map(devices: Iterable[DeviceRecordModel]) -> dict[str, DeviceRecordModel]:
-    return {device.device_id: device for device in devices}
-
-
-def new_devices_since(
-    baseline: Iterable[DeviceRecordModel],
-    current: Iterable[DeviceRecordModel],
-) -> list[DeviceRecordModel]:
-    baseline_ids = {device.device_id for device in baseline}
-    return [device for device in current if device.device_id not in baseline_ids]
-
-
-def validate_candidate_device(device: DeviceRecordModel, required_bytes: int) -> None:
-    if not device.removable:
-        raise ValueError("The selected device is not marked as removable media.")
-    if device.system_disk:
-        raise ValueError("The selected device is a system disk and cannot be written.")
-    if device.mounted_partitions:
-        raise ValueError(
-            "The selected device still has mounted partitions: "
-            + ", ".join(device.mounted_partitions)
+def _list_drives_windows_wmic() -> list[DriveInfo]:
+    """Fallback for old Windows without a modern PowerShell."""
+    try:
+        result = subprocess.run(
+            [
+                "wmic", "diskdrive",
+                "where", "MediaType='Removable Media' or InterfaceType='USB'",
+                "get", "DeviceID,Model,Size,InterfaceType",
+                "/format:csv",
+            ],
+            capture_output=True, text=True, timeout=15,
         )
-    if device.size_bytes < required_bytes:
-        raise ValueError(
-            f"The selected device is too small. Need at least {required_bytes} bytes."
+    except Exception:
+        return []
+
+    drives: list[DriveInfo] = []
+    for line in result.stdout.splitlines():
+        parts = [p.strip() for p in line.split(",")]
+        if len(parts) < 4 or parts[1] == "DeviceID":
+            continue
+        _node, device_id, iface, model, size_str = (*parts[:5], *[""] * 5)[:5]
+        try:
+            size = int(size_str)
+        except (ValueError, TypeError):
+            continue
+        if not device_id or size == 0:
+            continue
+        # wmic DeviceID is already like \\.\PHYSICALDRIVE2
+        drives.append(DriveInfo(
+            device=device_id,
+            label=model.strip() or device_id,
+            size_bytes=size,
+            bus_type=iface.strip() or "USB",
+        ))
+    return drives
+
+
+def _list_drives_linux() -> list[DriveInfo]:
+    """Use lsblk to list removable block devices."""
+    try:
+        result = subprocess.run(
+            ["lsblk", "-J", "-b", "-o", "NAME,SIZE,TYPE,TRAN,MODEL,RM"],
+            capture_output=True, text=True, timeout=10,
         )
+    except FileNotFoundError:
+        return []
+
+    if result.returncode != 0 or not result.stdout.strip():
+        return []
+
+    data = json.loads(result.stdout)
+    drives: list[DriveInfo] = []
+    for dev in data.get("blockdevices", []):
+        if dev.get("type") != "disk":
+            continue
+        tran = (dev.get("tran") or "").lower()
+        rm = dev.get("rm") in (True, "1", 1)
+        # Only include clearly removable / USB / SD / MMC devices
+        if not rm and tran not in ("usb", "sd", "mmc", "sdio"):
+            continue
+        name = dev.get("name", "")
+        size = int(dev.get("size") or 0)
+        if not name or size == 0:
+            continue
+        model = (dev.get("model") or "").strip() or name
+        drives.append(DriveInfo(
+            device=f"/dev/{name}",
+            label=model,
+            size_bytes=size,
+            bus_type=tran.upper() or "USB",
+        ))
+    return drives
 
 
-def get_device(device_id: str) -> DeviceRecordModel:
-    for device in list_candidate_devices():
-        if device.device_id == device_id:
-            return device
-    raise ValueError(f"Could not find removable device with id {device_id}")
+# ──────────────────────────────────────────────────────────────────────────────
+# Flashing
+# ──────────────────────────────────────────────────────────────────────────────
 
+def flash_image(image_path: Path, device: str) -> Iterator[dict]:
+    """Decompress *image_path* (.img.xz) and write it to *device* in streaming
+    fashion.  Yields progress dicts at each chunk so callers can push them to
+    the browser via SSE.
 
-def flash_image(
-    image_path: Path,
-    device_path: str,
-    expected_size_bytes: int | None = None,
-) -> Iterator[dict]:
+    Progress dict keys:
+        written   – bytes written so far
+        percent   – 0-100 (estimated; based on typical 7× expansion ratio)
+        speed_mb  – current write speed in MB/s
+        status    – "flashing" | "done" | "error"
+        message   – human-readable status string
+    """
     if not image_path.exists():
         yield _err(0, f"Image file not found: {image_path}")
         return
 
-    if image_path.suffix == ".xz":
-        source = lzma.open(str(image_path), "rb")
-        total_bytes = expected_size_bytes or max(image_path.stat().st_size * 7, 1)
-    else:
-        source = image_path.open("rb")
-        total_bytes = expected_size_bytes or image_path.stat().st_size
+    compressed_size = image_path.stat().st_size
+    # BBB images compress ~7× — use this as a rough denominator for %
+    estimated_total = max(compressed_size * 7, 1)
 
     written = 0
-    started = time.monotonic()
+    t0 = time.monotonic()
+
     try:
-        with source as src, open(device_path, "r+b", buffering=0) as dst:
-            while True:
-                chunk = src.read(_CHUNK)
-                if not chunk:
-                    break
-                dst.write(chunk)
-                written += len(chunk)
-                elapsed = max(time.monotonic() - started, 1e-3)
-                speed_mb = written / elapsed / (1024 * 1024)
-                percent = min(int(written / max(total_bytes, 1) * 100), 99)
-                yield {
-                    "written": written,
-                    "percent": percent,
-                    "speed_mb": round(speed_mb, 1),
-                    "status": "flashing",
-                    "message": (
-                        f"Writing image data to {device_path} at {speed_mb:.1f} MB/s."
-                    ),
-                }
-            dst.flush()
-            os.fsync(dst.fileno())
+        with lzma.open(str(image_path), "rb") as src:
+            # buffering=0 bypasses Python's internal buffer — required for
+            # correct sector-aligned writes on Windows raw disk handles.
+            with open(device, "r+b", buffering=0) as dst:
+                while True:
+                    chunk = src.read(_CHUNK)
+                    if not chunk:
+                        break
+                    dst.write(chunk)
+                    written += len(chunk)
+                    elapsed = max(time.monotonic() - t0, 1e-3)
+                    speed = written / elapsed / (1024 * 1024)
+                    pct = min(int(written / estimated_total * 100), 99)
+                    yield {
+                        "written": written,
+                        "percent": pct,
+                        "speed_mb": round(speed, 1),
+                        "status": "flashing",
+                        "message": (
+                            f"Writing… {written // (1024 ** 2)} MB written"
+                            f" at {speed:.1f} MB/s"
+                        ),
+                    }
+
+                # Flush kernel write-back cache before we report success
+                try:
+                    dst.flush()
+                    __import__("os").fsync(dst.fileno())
+                except OSError:
+                    pass
+
     except PermissionError:
         yield _err(
             written,
-            "Permission denied while accessing the raw disk. " + admin_instructions(),
+            "Permission denied — the server needs administrator/root privileges "
+            "to write to a raw disk.  "
+            + admin_instructions(),
         )
         return
+
     except OSError as exc:
-        yield _err(written, f"OS error while writing the image: {exc}")
+        code = getattr(exc, "winerror", None) or exc.errno
+        if code == 5:   # Windows ERROR_ACCESS_DENIED
+            yield _err(
+                written,
+                "Access denied (error 5).  Make sure the server is running as "
+                "Administrator and that no other program is using the drive.",
+            )
+        elif code == 19:  # Windows ERROR_WRITE_PROTECT
+            yield _err(written, "The SD card is write-protected.  Check the physical lock switch on the card.")
+        else:
+            yield _err(written, f"OS error while writing: {exc}")
         return
 
-    elapsed = max(time.monotonic() - started, 1e-3)
-    speed_mb = written / elapsed / (1024 * 1024)
+    elapsed = max(time.monotonic() - t0, 1e-3)
+    speed = written / elapsed / (1024 * 1024)
     yield {
         "written": written,
         "percent": 100,
-        "speed_mb": round(speed_mb, 1),
+        "speed_mb": round(speed, 1),
         "status": "done",
         "message": (
-            f"Finished writing {written // (1024**2)} MB in {elapsed:.0f} seconds. "
-            "The write cache has been flushed."
+            f"Done! Wrote {written // (1024 ** 2)} MB in {elapsed:.0f} s"
+            f" ({speed:.1f} MB/s average). "
+            f"Safe to remove your SD card."
         ),
     }
-
-
-def verify_written_image(device_id: str) -> dict:
-    device = get_device(device_id)
-    return {
-        "status": "done",
-        "message": f"Verified that {device.label} is still present after flashing.",
-        "device": device.model_dump(mode="json"),
-    }
-
-
-def eject_drive(device_path: str) -> str:
-    if platform.system() == "Windows":
-        return _eject_windows(device_path)
-    return _eject_linux(device_path)
-
-
-def _eject_windows(device: str) -> str:
-    try:
-        number = device.lower().replace("\\\\.\\physicaldrive", "").strip()
-        script = (
-            "Get-Disk -Number "
-            + number
-            + " | Set-Disk -IsOffline $true -ErrorAction SilentlyContinue; Write-Output ok"
-        )
-        subprocess.run(
-            ["powershell", "-NoProfile", "-NonInteractive", "-Command", script],
-            capture_output=True,
-            timeout=15,
-            check=False,
-        )
-    except Exception:
-        pass
-    return "Flashing complete. Use Safely Remove Hardware before unplugging the SD card."
-
-
-def _eject_linux(device: str) -> str:
-    try:
-        subprocess.run(["sync"], timeout=30, check=False)
-        result = subprocess.run(
-            ["eject", device],
-            capture_output=True,
-            text=True,
-            timeout=15,
-            check=False,
-        )
-        if result.returncode == 0:
-            return "Drive ejected successfully. Safe to unplug."
-    except FileNotFoundError:
-        try:
-            subprocess.run(
-                ["udisksctl", "power-off", "-b", device],
-                capture_output=True,
-                timeout=15,
-                check=False,
-            )
-            return "Drive powered off. Safe to unplug."
-        except Exception:
-            pass
-    except Exception:
-        pass
-    return "Please unmount the drive manually before unplugging."
 
 
 def _err(written: int, message: str) -> dict:
@@ -260,156 +318,61 @@ def _err(written: int, message: str) -> dict:
     }
 
 
-def _list_devices_linux() -> list[DeviceRecordModel]:
+# ──────────────────────────────────────────────────────────────────────────────
+# Safe eject
+# ──────────────────────────────────────────────────────────────────────────────
+
+def eject_drive(device: str) -> str:
+    """Attempt a safe eject/unmount.  Returns a human-readable status string."""
+    if platform.system() == "Windows":
+        return _eject_windows(device)
+    return _eject_linux(device)
+
+
+def _eject_windows(device: str) -> str:
     try:
-        result = subprocess.run(
-            [
-                "lsblk",
-                "-J",
-                "-b",
-                "-o",
-                "NAME,PATH,PKNAME,SIZE,TYPE,TRAN,MODEL,VENDOR,SERIAL,RM,HOTPLUG,MOUNTPOINTS",
-            ],
-            capture_output=True,
-            text=True,
-            timeout=10,
-            check=False,
+        # Extract disk number from \\.\PhysicalDrive2 → "2"
+        num = device.lower().replace("\\\\.\\physicaldrive", "").strip()
+        script = (
+            f"$partitions = Get-Partition -DiskNumber {num} -ErrorAction SilentlyContinue; "
+            "foreach ($p in $partitions) { "
+            "  if ($p.DriveLetter) { "
+            "    $vol = Get-Volume -DriveLetter $p.DriveLetter; "
+            "    $vol | Get-Disk | Set-Disk -IsOffline $false -ErrorAction SilentlyContinue "
+            "  } "
+            "}; "
+            "Write-Output ok"
         )
-    except FileNotFoundError:
-        return []
-    if result.returncode != 0 or not result.stdout.strip():
-        return []
-
-    root_disk = _linux_root_disk()
-    payload = json.loads(result.stdout)
-    devices: list[DeviceRecordModel] = []
-    for raw in payload.get("blockdevices", []):
-        if raw.get("type") != "disk":
-            continue
-        path = raw.get("path") or f"/dev/{raw.get('name', '')}"
-        transport = (raw.get("tran") or "").lower()
-        removable = raw.get("rm") in (True, 1, "1") or raw.get("hotplug") in (
-            True,
-            1,
-            "1",
-        ) or transport in {"usb", "mmc", "sd", "sdio"}
-        mounted = _collect_mountpoints(raw)
-        label = " ".join(
-            p for p in [(raw.get("vendor") or "").strip(), (raw.get("model") or "").strip()] if p
-        ) or (raw.get("model") or raw.get("name") or path)
-        system_disk = path == root_disk
-        serial = (raw.get("serial") or "").strip() or None
-        device_id = f"linux:{serial or raw.get('name') or path}"
-        devices.append(
-            DeviceRecordModel(
-                device_id=device_id,
-                device_path=path,
-                label=label,
-                vendor=(raw.get("vendor") or "").strip(),
-                model=(raw.get("model") or "").strip(),
-                serial=serial,
-                transport=transport.upper(),
-                size_bytes=int(raw.get("size") or 0),
-                removable=bool(removable),
-                system_disk=system_disk,
-                mounted_partitions=mounted,
-            )
-        )
-    return devices
-
-
-def _linux_root_disk() -> str | None:
-    try:
-        result = subprocess.run(
-            ["findmnt", "-J", "/"],
-            capture_output=True,
-            text=True,
-            timeout=5,
-            check=False,
-        )
-        if result.returncode != 0 or not result.stdout.strip():
-            return None
-        payload = json.loads(result.stdout)
-        filesystems = payload.get("filesystems") or []
-        if not filesystems:
-            return None
-        source = filesystems[0].get("source") or ""
-        if not source.startswith("/dev/"):
-            return None
-        pkname = subprocess.run(
-            ["lsblk", "-no", "PKNAME", source],
-            capture_output=True,
-            text=True,
-            timeout=5,
-            check=False,
-        )
-        parent = pkname.stdout.strip()
-        if parent:
-            return f"/dev/{parent}"
-        return source
-    except Exception:
-        return None
-
-
-def _flatten_mountpoints(value: object) -> list[str]:
-    if not value:
-        return []
-    if isinstance(value, list):
-        return [item for item in value if item]
-    if isinstance(value, str):
-        return [value] if value else []
-    return []
-
-
-def _collect_mountpoints(node: dict) -> list[str]:
-    mountpoints = _flatten_mountpoints(node.get("mountpoints"))
-    for child in node.get("children") or []:
-        mountpoints.extend(_collect_mountpoints(child))
-    return sorted(set(item for item in mountpoints if item))
-
-
-def _list_devices_windows() -> list[DeviceRecordModel]:
-    script = (
-        "Get-Disk | Select-Object Number,FriendlyName,Size,BusType,IsBoot,IsSystem,SerialNumber | "
-        "ConvertTo-Json -Compress -Depth 3"
-    )
-    try:
-        result = subprocess.run(
+        subprocess.run(
             ["powershell", "-NoProfile", "-NonInteractive", "-Command", script],
-            capture_output=True,
-            text=True,
-            timeout=15,
-            check=False,
+            capture_output=True, timeout=10,
         )
+    except Exception:
+        pass
+    return (
+        "Flashing complete. Click the <strong>Safely Remove Hardware</strong> icon "
+        "in your Windows taskbar (bottom-right corner) before unplugging the SD card."
+    )
+
+
+def _eject_linux(device: str) -> str:
+    try:
+        subprocess.run(["sync"], timeout=30, check=False)
+        result = subprocess.run(
+            ["eject", device], capture_output=True, text=True, timeout=15, check=False
+        )
+        if result.returncode == 0:
+            return "Drive ejected successfully. Safe to unplug."
     except FileNotFoundError:
-        return []
-    if result.returncode != 0 or not result.stdout.strip():
-        return []
-    payload = json.loads(result.stdout)
-    rows = payload if isinstance(payload, list) else [payload]
-    devices: list[DeviceRecordModel] = []
-    for row in rows:
-        number = row.get("Number")
-        if number is None:
-            continue
-        transport = (row.get("BusType") or "").upper()
-        removable = transport in {"USB", "SD", "MMC", "SDIO", "1394"}
-        serial = (row.get("SerialNumber") or "").strip() or None
-        path = f"\\\\.\\PhysicalDrive{number}"
-        label = (row.get("FriendlyName") or f"Disk {number}").strip()
-        devices.append(
-            DeviceRecordModel(
-                device_id=f"windows:{serial or number}",
-                device_path=path,
-                label=label,
-                vendor="",
-                model=label,
-                serial=serial,
-                transport=transport,
-                size_bytes=int(row.get("Size") or 0),
-                removable=removable,
-                system_disk=bool(row.get("IsBoot")) or bool(row.get("IsSystem")),
-                mounted_partitions=[],
+        # 'eject' not installed — try udisksctl
+        try:
+            subprocess.run(
+                ["udisksctl", "power-off", "-b", device],
+                capture_output=True, timeout=15, check=False,
             )
-        )
-    return devices
+            return "Drive powered off. Safe to unplug."
+        except Exception:
+            pass
+    except Exception:
+        pass
+    return "Please unmount the drive manually before unplugging."

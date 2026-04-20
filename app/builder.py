@@ -395,7 +395,6 @@ class ImageBuilder:
         metadata_dir.mkdir(parents=True, exist_ok=True)
         metadata = {
             "hostname": self.manifest.system.hostname,
-            "template_username": self.manifest.user.username,
             "bundles": self.manifest.bundles,
             "extra_packages": self.manifest.apt.extra_packages,
             "pip_packages": resolve_pip_packages(self.manifest.bundles),

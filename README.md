@@ -1,49 +1,6 @@
 # BBB Image Forge
 
-**A zero-touch BeagleBone Black imaging appliance for beginners.**
-
-BBB Image Forge is being reshaped around a simple promise:
-
-1. Install one package.
-2. Open the app.
-3. Pick a certified BBB setup.
-4. Insert an SD card.
-5. Let the app personalize and flash it safely.
-
-The main app is designed to stay unprivileged. A narrowly scoped helper handles
-local image preparation, SD card detection, flashing, eject, and cleanup.
-Certified generic artifacts are intended to come from remote or CI-backed build
-infrastructure, while user secrets such as passwords, SSH keys, and Wi-Fi
-credentials are applied locally on the machine doing the flash.
-
----
-
-## Current repo status
-
-This repository now contains the core pieces for that appliance architecture:
-
-- A certified catalog model and built-in catalog file
-- A controller flow for build request, download, local personalization, and flash
-- A helper CLI boundary for privileged operations
-- Installer-facing self-check and repair commands
-- Packaging scaffolding, including a private-environment `environment.yml`
-
-For development, you can still run the local controller directly:
-
-```bash
-python -m app.main
-```
-
-Installer and packaging helpers:
-
-```bash
-python -m app.installer selfcheck
-python -m app.helper healthcheck
-```
-
-Packaging notes live in [`packaging/README.md`](packaging/README.md).
-
-GitHub Actions build-pipeline setup lives in [`docs/github-actions-cicd.md`](docs/github-actions-cicd.md).
+**Build a custom BeagleBone Black image — no experience needed.**
 
 ---
 
