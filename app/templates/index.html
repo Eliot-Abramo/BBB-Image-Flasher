@@ -720,9 +720,8 @@
 
     {% if os_name == "Linux" and not running_as_admin %}
     <div class="help-box">
-      <strong>Linux note:</strong> BBB Image Forge can run without launching the entire app as root.
-      If your Linux environment does not already allow loop-device and raw-disk access, grant this process the needed
-      permissions before building or flashing.
+      <strong>Linux note:</strong> Building stays unprivileged and writes only inside this project folder.
+      Administrator permission is only needed later if you choose to write the finished image directly to an SD card.
     </div>
     {% endif %}
 
@@ -975,12 +974,13 @@
         <button type="button" class="build-btn" id="build-btn" onclick="startBuild()">
           Build My Image
         </button>
-        <div class="build-hint">
-          Builds your custom image on this machine — downloads the official BeagleBone Black base image,
-          installs your chosen software, and produces a ready-to-flash file.
-          This takes <strong>10–30 minutes</strong> depending on the packages you picked.
-          <strong>You do not need an SD card plugged in to build the image.</strong>
-        </div>
+      <div class="build-hint">
+        Builds your custom image on this machine — downloads the official BeagleBone Black base image,
+        prepares your chosen software and settings, and produces a ready-to-flash file.
+        This takes <strong>10–30 minutes</strong> depending on the packages you picked.
+        <strong>You do not need an SD card plugged in to build the image.</strong>
+        Your BBB completes the package installation on its first boot.
+      </div>
       </div>
 
     </form>
@@ -1028,13 +1028,13 @@
         </li>
         <li>
           <div class="step-num">3</div>
-          <div>
-            <strong>Boot your BBB.</strong>
-            Insert the card into the BeagleBone Black (slot on the <strong>underside</strong>) and connect the power.
-            The four blue LEDs will do various blink patterns — that's completely normal.
-            Wait about 60 seconds for first boot.
-          </div>
-        </li>
+        <div>
+          <strong>Boot your BBB.</strong>
+          Insert the card into the BeagleBone Black (slot on the <strong>underside</strong>) and connect the power.
+          The four blue LEDs will do various blink patterns — that's completely normal.
+          First boot may take several minutes while BBB Image Forge finishes setup and installs your selected packages.
+        </div>
+      </li>
         <li>
           <div class="step-num">4</div>
           <div>
@@ -1087,6 +1087,8 @@
   </div><!-- end .page-wrap -->
 
   <script>
+    const PROFILE_BUNDLES = {{ profile_bundles | tojson }};
+
     // ── Profile card selection ──
     function selectProfile(name) {
       document.querySelectorAll('.profile-card').forEach(el => el.classList.remove('selected'));
@@ -1094,10 +1096,22 @@
       if (card) card.classList.add('selected');
       const radio = card ? card.querySelector('input[type="radio"]') : null;
       if (radio) radio.checked = true;
+      applyProfileBundles(name);
+    }
+    function applyProfileBundles(name) {
+      const selected = new Set(PROFILE_BUNDLES[name] || []);
+      document.querySelectorAll('.bundle-item input[type="checkbox"]').forEach(cb => {
+        cb.checked = selected.has(cb.value);
+        updateBundleStyle(cb.value);
+      });
     }
     window.addEventListener('DOMContentLoaded', function () {
       const first = document.querySelector('input[type="radio"][name="profile"]:checked');
-      if (first) { const card = first.closest('.profile-card'); if (card) card.classList.add('selected'); }
+      if (first) {
+        const card = first.closest('.profile-card');
+        if (card) card.classList.add('selected');
+        applyProfileBundles(first.value);
+      }
     });
 
     // ── Bundle checkbox styling ──

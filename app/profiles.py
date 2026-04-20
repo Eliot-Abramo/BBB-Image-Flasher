@@ -1,6 +1,9 @@
 from __future__ import annotations
+
 from pathlib import Path
+
 import yaml
+
 from app.models import ManifestModel
 
 
@@ -16,6 +19,13 @@ def load_profile(name: str) -> dict:
     if not path.exists():
         raise FileNotFoundError(f"Profile not found: {name}")
     return yaml.safe_load(path.read_text(encoding="utf-8"))
+
+
+def profile_bundle_map() -> dict[str, list[str]]:
+    return {
+        profile_name: list(load_profile(profile_name).get("bundles", []))
+        for profile_name in available_profiles()
+    }
 
 
 def instantiate_profile(name: str, **overrides) -> ManifestModel:

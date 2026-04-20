@@ -27,7 +27,7 @@ from app.flasher import (
 )
 from app.manifests import save_manifest
 from app.models import ManifestModel
-from app.profiles import available_profiles, instantiate_profile
+from app.profiles import available_profiles, instantiate_profile, profile_bundle_map
 
 
 BASE_DIR = Path(__file__).resolve().parent
@@ -92,6 +92,7 @@ async def index(request: Request):
             "artifacts": [str(a) for a in _find_artifacts()],
             "os_name": platform.system(),
             "running_as_admin": is_admin(),
+            "profile_bundles": profile_bundle_map(),
         },
     )
 

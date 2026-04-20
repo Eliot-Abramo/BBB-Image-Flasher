@@ -1,8 +1,10 @@
 from __future__ import annotations
 
+import base64
 import hashlib
 import json
 import os
+import shlex
 import shutil
 import subprocess
 import tempfile
@@ -52,15 +54,27 @@ class ImageBuilder:
         )
         shutil.copy2(raw_image, custom_image)
 
-        if self.manifest.provision_mode == "offline":
-            self._customize_offline(custom_image)
+        if self._can_mount_images():
+            if self.manifest.provision_mode == "offline":
+                self._customize_offline(custom_image)
+            else:
+                self._inject_firstboot_only(custom_image)
         else:
-            self._inject_firstboot_only(custom_image)
+            print(
+                "Building without sudo: using rootless first-boot provisioning "
+                "instead of loop-mount customization."
+            )
+            self._inject_rootless_firstboot(custom_image)
 
         report = self._write_build_report(custom_image)
         output_path = self._compress_output(custom_image)
         print(f"Build report: {report}")
         return output_path
+
+    def _can_mount_images(self) -> bool:
+        return os.geteuid() == 0 and all(
+            shutil.which(tool) for tool in ("losetup", "mount", "chroot")
+        )
 
     # ------------------------------------------------------------------
     # Download + verification
@@ -135,6 +149,84 @@ class ImageBuilder:
             self._configure_wifi(rootfs)
             self._install_firstboot_service(rootfs)
             self._write_metadata(rootfs)
+
+    def _inject_rootless_firstboot(self, image_path: Path) -> None:
+        if shutil.which("debugfs") is None:
+            raise BuildError(
+                "Rootless builds require `debugfs` from e2fsprogs to edit the image "
+                "without sudo."
+            )
+
+        start_bytes, size_bytes = self._rootfs_partition_bytes(image_path)
+        rootfs_image = self.work_dir / f"{image_path.stem}.rootfs.ext4"
+        if rootfs_image.exists():
+            rootfs_image.unlink()
+
+        self._run(
+            [
+                "dd",
+                f"if={image_path}",
+                f"of={rootfs_image}",
+                f"skip={start_bytes}",
+                f"count={size_bytes}",
+                "iflag=skip_bytes,count_bytes",
+                "status=none",
+            ]
+        )
+
+        with tempfile.TemporaryDirectory(prefix="bbbforge-rootless-") as tempdir_name:
+            tempdir = Path(tempdir_name)
+            script_file = tempdir / "bbb-image-forge-firstboot.sh"
+            unit_file = tempdir / "bbb-image-forge-firstboot.service"
+            metadata_file = tempdir / "manifest-resolved.json"
+
+            script_file.write_text(
+                self._render_rootless_firstboot_script(), encoding="utf-8"
+            )
+            unit_file.write_text(
+                self._render_firstboot_unit(need_network_online=False),
+                encoding="utf-8",
+            )
+            metadata_file.write_text(
+                json.dumps(self._metadata_payload(), indent=2), encoding="utf-8"
+            )
+
+            self._debugfs_write_file(
+                rootfs_image,
+                script_file,
+                "/usr/local/sbin/bbb-image-forge-firstboot.sh",
+                mode="0100755",
+            )
+            self._debugfs_write_file(
+                rootfs_image,
+                unit_file,
+                "/etc/systemd/system/bbb-image-forge-firstboot.service",
+                mode="0100644",
+            )
+            self._debugfs_write_file(
+                rootfs_image,
+                metadata_file,
+                "/opt/bbb-image-forge/manifest-resolved.json",
+                mode="0100644",
+            )
+            self._debugfs_symlink(
+                rootfs_image,
+                "/etc/systemd/system/multi-user.target.wants/bbb-image-forge-firstboot.service",
+                "/etc/systemd/system/bbb-image-forge-firstboot.service",
+            )
+
+        self._run(
+            [
+                "dd",
+                f"if={rootfs_image}",
+                f"of={image_path}",
+                f"seek={start_bytes}",
+                "oflag=seek_bytes",
+                "conv=notrunc",
+                "status=none",
+            ]
+        )
+        rootfs_image.unlink(missing_ok=True)
 
     # ------------------------------------------------------------------
     # Rootfs preparation
@@ -366,19 +458,7 @@ class ImageBuilder:
         unit = rootfs / "etc/systemd/system/bbb-image-forge-firstboot.service"
         unit.parent.mkdir(parents=True, exist_ok=True)
         unit.write_text(
-            "[Unit]\n"
-            "Description=BBB Image Forge first-boot provisioning\n"
-            "After=network-online.target\n"
-            "Wants=network-online.target\n\n"
-            "[Service]\n"
-            "Type=oneshot\n"
-            "ExecStart=/usr/local/sbin/bbb-image-forge-firstboot.sh\n"
-            "RemainAfterExit=yes\n"
-            "StandardOutput=journal+console\n"
-            "StandardError=journal+console\n\n"
-            "[Install]\n"
-            "WantedBy=multi-user.target\n",
-            encoding="utf-8",
+            self._render_firstboot_unit(need_network_online=True), encoding="utf-8"
         )
         self._run_in_chroot(
             rootfs, ["systemctl", "enable", "bbb-image-forge-firstboot.service"]
@@ -415,23 +495,244 @@ class ImageBuilder:
             return "bullseye"
         return "trixie"
 
+    def _rootfs_partition_bytes(self, image_path: Path) -> tuple[int, int]:
+        result = subprocess.run(
+            ["sfdisk", "--json", str(image_path)],
+            capture_output=True,
+            text=True,
+            check=True,
+        )
+        table = json.loads(result.stdout)["partitiontable"]
+        sector_size = int(table["sectorsize"])
+        for partition in table.get("partitions", []):
+            if partition.get("type") == "83":
+                start_bytes = int(partition["start"]) * sector_size
+                size_bytes = int(partition["size"]) * sector_size
+                return start_bytes, size_bytes
+        raise BuildError(f"Could not find a Linux rootfs partition in {image_path.name}.")
+
     # ------------------------------------------------------------------
     # Metadata + output
     # ------------------------------------------------------------------
 
-    def _write_metadata(self, rootfs: Path) -> None:
-        metadata_dir = rootfs / "opt/bbb-image-forge"
-        metadata_dir.mkdir(parents=True, exist_ok=True)
-        metadata = {
+    def _metadata_payload(self) -> dict:
+        return {
             "hostname": self.manifest.system.hostname,
             "bundles": self.manifest.bundles,
             "extra_packages": self.manifest.apt.extra_packages,
-            "pip_packages": resolve_pip_packages(self.manifest.bundles),
+            "resolved_packages": resolved_package_list(self.manifest),
+            "resolved_pip_packages": resolve_pip_packages(self.manifest.bundles),
             "base_image": self.manifest.base_image.label,
             "base_url": str(self.manifest.base_image.url),
             "snapshot": self.manifest.freeze.debian_snapshot,
             "provision_mode": self.manifest.provision_mode,
+            "build_strategy": (
+                self.manifest.provision_mode
+                if self._can_mount_images()
+                else "rootless-firstboot"
+            ),
         }
+
+    def _render_firstboot_unit(self, *, need_network_online: bool) -> str:
+        after_lines = (
+            "After=network-online.target\nWants=network-online.target\n\n"
+            if need_network_online
+            else "After=local-fs.target\n\n"
+        )
+        return (
+            "[Unit]\n"
+            "Description=BBB Image Forge first-boot provisioning\n"
+            f"{after_lines}"
+            "[Service]\n"
+            "Type=oneshot\n"
+            "ExecStart=/usr/local/sbin/bbb-image-forge-firstboot.sh\n"
+            "RemainAfterExit=yes\n"
+            "StandardOutput=journal+console\n"
+            "StandardError=journal+console\n\n"
+            "[Install]\n"
+            "WantedBy=multi-user.target\n"
+        )
+
+    def _render_rootless_firstboot_script(self) -> str:
+        apt_packages = resolved_package_list(self.manifest)
+        pip_packages = resolve_pip_packages(self.manifest.bundles)
+        firstboot_cmds = resolve_firstboot_commands(self.manifest.bundles)
+
+        eth = self.manifest.network.ethernet
+        wifi = self.manifest.network.wifi
+        static = eth.static if eth.mode == "static" else None
+        authorized_keys = "\n".join(self.manifest.user.authorized_keys).strip()
+        authorized_keys_b64 = (
+            base64.b64encode((authorized_keys + "\n").encode("utf-8")).decode("ascii")
+            if authorized_keys
+            else ""
+        )
+
+        lines = [
+            "#!/usr/bin/env bash",
+            "set -euo pipefail",
+            "export DEBIAN_FRONTEND=noninteractive",
+            f"HOSTNAME_VALUE={shlex.quote(self.manifest.system.hostname)}",
+            f"TIMEZONE_VALUE={shlex.quote(self.manifest.system.timezone)}",
+            f"LOCALE_VALUE={shlex.quote(self.manifest.system.locale)}",
+            f"USERNAME_VALUE={shlex.quote(self.manifest.user.username)}",
+            f"PASSWORD_VALUE={shlex.quote(self.manifest.user.password or '')}",
+            f"PASSWORD_LOCKED_VALUE={'1' if self.manifest.user.password_locked else '0'}",
+            f"AUTHORIZED_KEYS_B64={shlex.quote(authorized_keys_b64)}",
+            f"PASSWORD_AUTH_VALUE={'no' if self.manifest.ssh.disable_password_auth else 'yes'}",
+            f"PERMIT_ROOT_LOGIN_VALUE={'yes' if self.manifest.ssh.permit_root_login else 'no'}",
+            "",
+            'echo "$HOSTNAME_VALUE" >/etc/hostname',
+            'hostnamectl set-hostname "$HOSTNAME_VALUE" || true',
+            'echo "$TIMEZONE_VALUE" >/etc/timezone',
+            'id -u "$USERNAME_VALUE" >/dev/null 2>&1 || useradd -m -s /bin/bash "$USERNAME_VALUE"',
+            'for group in sudo dialout gpio i2c spi; do',
+            '  getent group "$group" >/dev/null 2>&1 && usermod -aG "$group" "$USERNAME_VALUE" || true',
+            "done",
+            'if [ "$PASSWORD_LOCKED_VALUE" = "0" ] && [ -n "$PASSWORD_VALUE" ]; then',
+            '  printf "%s:%s\\n" "$USERNAME_VALUE" "$PASSWORD_VALUE" | chpasswd',
+            "else",
+            '  passwd -l "$USERNAME_VALUE" || true',
+            "fi",
+            'mkdir -p "/home/$USERNAME_VALUE/.ssh"',
+            'chmod 700 "/home/$USERNAME_VALUE/.ssh"',
+            'if [ -n "$AUTHORIZED_KEYS_B64" ]; then',
+            '  printf "%s" "$AUTHORIZED_KEYS_B64" | base64 -d >"/home/$USERNAME_VALUE/.ssh/authorized_keys"',
+            '  chmod 600 "/home/$USERNAME_VALUE/.ssh/authorized_keys"',
+            "fi",
+            'chown -R "$USERNAME_VALUE:$USERNAME_VALUE" "/home/$USERNAME_VALUE/.ssh"',
+            "mkdir -p /etc/ssh/sshd_config.d",
+            "cat >/etc/ssh/sshd_config.d/90-bbb-image-forge.conf <<'EOF_SSH'",
+            f"PasswordAuthentication {'no' if self.manifest.ssh.disable_password_auth else 'yes'}",
+            f"PermitRootLogin {'yes' if self.manifest.ssh.permit_root_login else 'no'}",
+            "PubkeyAuthentication yes",
+            "EOF_SSH",
+            "mkdir -p /etc/systemd/network",
+        ]
+
+        if static:
+            lines.extend(
+                [
+                    "cat >/etc/systemd/network/20-eth0.network <<'EOF_ETH'",
+                    "[Match]",
+                    "Name=eth0",
+                    "",
+                    "[Network]",
+                    f"Address={static.address}",
+                    *( [f"Gateway={static.gateway}"] if static.gateway else [] ),
+                    f"DNS={' '.join(static.dns_servers)}",
+                    "EOF_ETH",
+                ]
+            )
+        else:
+            lines.extend(
+                [
+                    "cat >/etc/systemd/network/20-eth0.network <<'EOF_ETH'",
+                    "[Match]",
+                    "Name=eth0",
+                    "",
+                    "[Network]",
+                    "DHCP=yes",
+                    "EOF_ETH",
+                ]
+            )
+
+        lines.append("systemctl enable systemd-networkd.service || true")
+
+        if wifi is not None:
+            lines.extend(
+                [
+                    "cat >/etc/systemd/network/25-wlan0.network <<'EOF_WLAN'",
+                    "[Match]",
+                    "Name=wlan0",
+                    "",
+                    "[Network]",
+                    "DHCP=yes",
+                    "EOF_WLAN",
+                    "mkdir -p /etc/wpa_supplicant",
+                    "cat >/etc/wpa_supplicant/wpa_supplicant-wlan0.conf <<'EOF_WPA'",
+                    "ctrl_interface=DIR=/run/wpa_supplicant GROUP=netdev",
+                    "update_config=1",
+                    "country=GB",
+                    "",
+                    "network={",
+                    f'    ssid="{wifi.ssid}"',
+                    f'    psk="{wifi.psk}"',
+                    "}",
+                    "EOF_WPA",
+                    "systemctl enable wpa_supplicant@wlan0.service || true",
+                ]
+            )
+
+        lines.extend(
+            [
+                "systemctl daemon-reload || true",
+                "systemctl restart systemd-networkd.service || true",
+                "systemctl restart wpa_supplicant@wlan0.service || true",
+                "sleep 5",
+            ]
+        )
+
+        if self.manifest.freeze.debian_snapshot:
+            snapshot_tag = (
+                self.manifest.freeze.debian_snapshot.replace(":", "").replace("-", "")
+            )
+            suite = self._debian_suite()
+            lines.extend(
+                [
+                    "mkdir -p /etc/apt/apt.conf.d",
+                    "cat >/etc/apt/sources.list <<'EOF_APT'",
+                    f"deb [check-valid-until=no] http://snapshot.debian.org/archive/debian/{snapshot_tag}/ {suite} main contrib non-free non-free-firmware",
+                    f"deb [check-valid-until=no] http://snapshot.debian.org/archive/debian-security/{snapshot_tag}/ {suite}-security main contrib non-free non-free-firmware",
+                    f"deb [check-valid-until=no] http://snapshot.debian.org/archive/debian/{snapshot_tag}/ {suite}-updates main contrib non-free non-free-firmware",
+                    "EOF_APT",
+                    'printf \'Acquire::Check-Valid-Until "false";\\n\' >/etc/apt/apt.conf.d/99snapshot',
+                ]
+            )
+
+        if firstboot_cmds:
+            lines.extend(["", "# --- Repository and key setup ---", *firstboot_cmds])
+
+        if apt_packages:
+            lines.extend(
+                [
+                    "",
+                    "# --- Apt package installation ---",
+                    "apt-get update",
+                    "apt-get install -y --no-install-recommends "
+                    + " ".join(apt_packages),
+                    "apt-get clean",
+                ]
+            )
+
+        if pip_packages:
+            lines.extend(
+                [
+                    "",
+                    "# --- Pip package installation ---",
+                    "pip3 install --break-system-packages --no-cache-dir "
+                    + " ".join(pip_packages),
+                ]
+            )
+
+        lines.extend(
+            [
+                "",
+                "sync",
+                "",
+                "# --- Self-cleanup ---",
+                "systemctl disable bbb-image-forge-firstboot.service || true",
+                "rm -f /etc/systemd/system/multi-user.target.wants/bbb-image-forge-firstboot.service",
+                "rm -f /etc/systemd/system/bbb-image-forge-firstboot.service",
+                "rm -f /usr/local/sbin/bbb-image-forge-firstboot.sh",
+            ]
+        )
+        return "\n".join(lines) + "\n"
+
+    def _write_metadata(self, rootfs: Path) -> None:
+        metadata_dir = rootfs / "opt/bbb-image-forge"
+        metadata_dir.mkdir(parents=True, exist_ok=True)
+        metadata = self._metadata_payload()
         (metadata_dir / "manifest-resolved.json").write_text(
             json.dumps(metadata, indent=2), encoding="utf-8"
         )
@@ -507,6 +808,56 @@ class ImageBuilder:
             target = rootfs / dst
             if self._is_mountpoint(target):
                 subprocess.run(["umount", str(target)], check=False)
+
+    def _debugfs_write_file(
+        self, filesystem_image: Path, source: Path, destination: str, *, mode: str
+    ) -> None:
+        self._debugfs_mkdir_p(filesystem_image, str(Path(destination).parent))
+        self._debugfs_optional(filesystem_image, f"rm {destination}")
+        self._debugfs(
+            filesystem_image,
+            f"write {shlex.quote(str(source))} {shlex.quote(destination)}",
+        )
+        self._debugfs(
+            filesystem_image, f"set_inode_field {shlex.quote(destination)} mode {mode}"
+        )
+
+    def _debugfs_symlink(
+        self, filesystem_image: Path, link_path: str, target_path: str
+    ) -> None:
+        self._debugfs_mkdir_p(filesystem_image, str(Path(link_path).parent))
+        self._debugfs_optional(filesystem_image, f"rm {link_path}")
+        self._debugfs(
+            filesystem_image,
+            f"symlink {shlex.quote(link_path)} {shlex.quote(target_path)}",
+        )
+
+    def _debugfs_mkdir_p(self, filesystem_image: Path, directory: str) -> None:
+        current = Path("/")
+        for part in Path(directory).parts:
+            if part == "/":
+                continue
+            current /= part
+            self._debugfs_optional(filesystem_image, f"mkdir {current.as_posix()}")
+
+    def _debugfs_optional(self, filesystem_image: Path, command: str) -> None:
+        subprocess.run(
+            ["debugfs", "-w", "-R", command, str(filesystem_image)],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+
+    def _debugfs(self, filesystem_image: Path, command: str) -> None:
+        result = subprocess.run(
+            ["debugfs", "-w", "-R", command, str(filesystem_image)],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        if result.returncode != 0:
+            message = (result.stderr or result.stdout).strip()
+            raise BuildError(f"debugfs command failed: {command}\n{message}")
 
     @staticmethod
     def _is_mountpoint(path: Path) -> bool:

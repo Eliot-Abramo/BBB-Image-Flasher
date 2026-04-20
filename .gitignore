@@ -2,3 +2,6 @@
 __pycache__/
 *.xz
 work/
+.pytest_cache/
+.vscode/
+build/
