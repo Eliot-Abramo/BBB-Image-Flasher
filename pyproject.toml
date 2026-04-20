@@ -16,6 +16,16 @@ dependencies = [
   "python-multipart==0.0.20",
 ]
 
+[project.optional-dependencies]
+desktop = [
+  "pyinstaller>=6.10.0",
+]
+
+[project.scripts]
+bbb-image-forge = "app.main:main"
+bbb-image-forge-helper = "app.helper:cli"
+bbb-image-forge-installer = "app.installer:cli"
+
 [tool.ruff]
 line-length = 100
 
