@@ -89,6 +89,21 @@
       max-width: 580px;
     }
 
+    .runtime-chip {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      margin-bottom: 0.9rem;
+      padding: 0.4rem 0.8rem;
+      border-radius: 999px;
+      background: rgba(255, 255, 255, 0.16);
+      border: 1px solid rgba(255, 255, 255, 0.24);
+      font-size: 0.8rem;
+      font-weight: 700;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+    }
+
     /* ── Cards ── */
     .card {
       background: white;
@@ -459,6 +474,7 @@
 
   <!-- ── Hero ── -->
     <div class="hero">
+      <div class="runtime-chip">Runtime: {{ runtime_label }}</div>
       <h1>Flash Image to SD Card</h1>
       <p>
         Write your built <code>.img.xz</code> file directly to a microSD card.
@@ -477,8 +493,16 @@
     </div>
     {% endif %}
 
+    {% if is_wsl_runtime %}
+    <div class="alert alert-yellow">
+      <strong>WSL detected.</strong>
+      {{ flash_guidance }}
+      Native Windows is the supported path for raw-disk access to <code>\\.\PhysicalDriveN</code>.
+    </div>
+    {% endif %}
+
     <!-- ── Windows hint ── -->
-    {% if os_name == "Windows" %}
+    {% if is_windows_runtime %}
     <div class="alert alert-blue">
       <strong>Windows detected.</strong>
       Your SD card will be listed as a physical disk (e.g. <code>\\.\PhysicalDrive2</code>).
@@ -516,7 +540,7 @@
             No built images found yet.
           </div>
           <div style="font-size:0.88rem; color:#5a7184; margin-bottom:1.2rem;">
-            Go back and build your image first — it only takes one click.
+            Go back and build your image first in Linux or WSL, then return here to flash it.
           </div>
           <a href="/" style="
             display: inline-block; padding: 0.75rem 2rem;

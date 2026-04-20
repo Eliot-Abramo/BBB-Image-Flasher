@@ -3,7 +3,6 @@ from __future__ import annotations
 import asyncio
 import json
 import os
-import platform
 import shutil
 import subprocess
 import sys
@@ -27,6 +26,7 @@ from app.flasher import (
 from app.manifests import save_manifest
 from app.models import ManifestModel
 from app.profiles import available_profiles, instantiate_profile, profile_bundle_map
+from app.runtime import build_guidance, flash_guidance, runtime_label, supports_build
 
 
 BASE_DIR = Path(__file__).resolve().parent
@@ -41,7 +41,7 @@ _flash_executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix="flash")
 
 
 def _managed_python() -> str:
-    if platform.system() == "Linux":
+    if supports_build():
         candidate = MANAGED_CONDA_ENV / "bin" / "python"
         if candidate.exists():
             return str(candidate)
@@ -52,6 +52,19 @@ def _cli_command(*args: str, privileged: bool = False) -> list[str]:
     return [_managed_python(), "-u", str(CLI_WRAPPER), *args]
 
 
+def _template_runtime_context() -> dict[str, str | bool]:
+    runtime = runtime_label()
+    return {
+        "runtime_label": runtime,
+        "supports_build": supports_build(),
+        "build_guidance": build_guidance(),
+        "flash_guidance": flash_guidance(),
+        "is_windows_runtime": runtime == "Windows",
+        "is_wsl_runtime": runtime == "WSL",
+        "is_linux_runtime": runtime == "Linux",
+    }
+
+
 # ──────────────────────────────────────────────────────────────────────────────
 # Main page
 # ──────────────────────────────────────────────────────────────────────────────
@@ -59,6 +72,7 @@ def _cli_command(*args: str, privileged: bool = False) -> list[str]:
 
 @app.get("/", response_class=HTMLResponse)
 async def index(request: Request):
+    context = _template_runtime_context()
     return templates.TemplateResponse(
         request,
         "index.html",
@@ -67,9 +81,9 @@ async def index(request: Request):
             "bundles": [BUNDLES[name] for name in bundle_names()],
             "bundles_by_category": bundles_by_category(),
             "artifacts": [str(a) for a in _find_artifacts()],
-            "os_name": platform.system(),
             "running_as_admin": is_admin(),
             "profile_bundles": profile_bundle_map(),
+            **context,
         },
     )
 
@@ -168,10 +182,15 @@ async def api_build(
          "artifact": "<path>"}   ← only on status=done
     """
     # ── Privilege check ──────────────────────────────────────────────────────
-    if platform.system() != "Linux":
+    if not supports_build():
+        line = (
+            "Building is supported in WSL/Linux; flashing is supported in native Windows."
+            if runtime_label() == "Windows"
+            else "Building requires Linux/WSL."
+        )
 
         async def _no_linux():
-            yield f"data: {json.dumps({'status': 'error', 'line': 'Image building requires a Linux host (uses losetup / mount / chroot). The server is currently running on ' + platform.system() + '.'})}\n\n"
+            yield f"data: {json.dumps({'status': 'error', 'line': line})}\n\n"
 
         return StreamingResponse(
             _no_linux(), media_type="text/event-stream", headers=_SSE_HEADERS
@@ -285,16 +304,16 @@ def _find_artifacts() -> list[Path]:
 @app.get("/flash", response_class=HTMLResponse)
 async def flash_page(request: Request):
     admin = is_admin()
-    os_name = platform.system()  # "Windows" | "Linux" | "Darwin"
     artifacts = _find_artifacts()
+    context = _template_runtime_context()
     return templates.TemplateResponse(
         request,
         "flash.html",
         {
             "admin": admin,
-            "os_name": os_name,
             "admin_instructions": admin_instructions(),
             "artifacts": [str(a) for a in artifacts],
+            **context,
         },
     )
 

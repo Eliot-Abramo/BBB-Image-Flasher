@@ -509,7 +509,9 @@ class ImageBuilder:
                 start_bytes = int(partition["start"]) * sector_size
                 size_bytes = int(partition["size"]) * sector_size
                 return start_bytes, size_bytes
-        raise BuildError(f"Could not find a Linux rootfs partition in {image_path.name}.")
+        raise BuildError(
+            f"Could not find a Linux rootfs partition in {image_path.name}."
+        )
 
     # ------------------------------------------------------------------
     # Metadata + output
@@ -586,7 +588,7 @@ class ImageBuilder:
             'hostnamectl set-hostname "$HOSTNAME_VALUE" || true',
             'echo "$TIMEZONE_VALUE" >/etc/timezone',
             'id -u "$USERNAME_VALUE" >/dev/null 2>&1 || useradd -m -s /bin/bash "$USERNAME_VALUE"',
-            'for group in sudo dialout gpio i2c spi; do',
+            "for group in sudo dialout gpio i2c spi; do",
             '  getent group "$group" >/dev/null 2>&1 && usermod -aG "$group" "$USERNAME_VALUE" || true',
             "done",
             'if [ "$PASSWORD_LOCKED_VALUE" = "0" ] && [ -n "$PASSWORD_VALUE" ]; then',
@@ -619,7 +621,7 @@ class ImageBuilder:
                     "",
                     "[Network]",
                     f"Address={static.address}",
-                    *( [f"Gateway={static.gateway}"] if static.gateway else [] ),
+                    *([f"Gateway={static.gateway}"] if static.gateway else []),
                     f"DNS={' '.join(static.dns_servers)}",
                     "EOF_ETH",
                 ]
@@ -674,9 +676,9 @@ class ImageBuilder:
         )
 
         if self.manifest.freeze.debian_snapshot:
-            snapshot_tag = (
-                self.manifest.freeze.debian_snapshot.replace(":", "").replace("-", "")
-            )
+            snapshot_tag = self.manifest.freeze.debian_snapshot.replace(
+                ":", ""
+            ).replace("-", "")
             suite = self._debian_suite()
             lines.extend(
                 [
@@ -686,7 +688,7 @@ class ImageBuilder:
                     f"deb [check-valid-until=no] http://snapshot.debian.org/archive/debian-security/{snapshot_tag}/ {suite}-security main contrib non-free non-free-firmware",
                     f"deb [check-valid-until=no] http://snapshot.debian.org/archive/debian/{snapshot_tag}/ {suite}-updates main contrib non-free non-free-firmware",
                     "EOF_APT",
-                    'printf \'Acquire::Check-Valid-Until "false";\\n\' >/etc/apt/apt.conf.d/99snapshot',
+                    "printf 'Acquire::Check-Valid-Until \"false\";\\n' >/etc/apt/apt.conf.d/99snapshot",
                 ]
             )
 

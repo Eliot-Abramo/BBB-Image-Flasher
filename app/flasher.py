@@ -11,12 +11,13 @@ from __future__ import annotations
 
 import json
 import lzma
-import platform
 import subprocess
 import time
 from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Iterator
+
+from app.runtime import is_windows
 
 
 # Write in 4 MB chunks — satisfies the 512-byte sector-alignment
@@ -61,7 +62,7 @@ def is_admin() -> bool:
     to a raw disk device (requires write access to the raw device).
     """
     try:
-        if platform.system() == "Windows":
+        if is_windows():
             import ctypes
 
             return bool(ctypes.windll.shell32.IsUserAnAdmin())
@@ -72,7 +73,7 @@ def is_admin() -> bool:
 
 def admin_instructions() -> str:
     """Plain-English fix for the current platform."""
-    if platform.system() == "Windows":
+    if is_windows():
         return (
             "Right-click on <strong>Command Prompt</strong> or "
             "<strong>PowerShell</strong> and choose "
@@ -92,7 +93,7 @@ def admin_instructions() -> str:
 
 def list_drives() -> list[DriveInfo]:
     """Return removable / external drives suitable for SD card flashing."""
-    if platform.system() == "Windows":
+    if is_windows():
         return _list_drives_windows()
     return _list_drives_linux()
 
@@ -348,7 +349,7 @@ def _err(written: int, message: str) -> dict:
 
 def eject_drive(device: str) -> str:
     """Attempt a safe eject/unmount.  Returns a human-readable status string."""
-    if platform.system() == "Windows":
+    if is_windows():
         return _eject_windows(device)
     return _eject_linux(device)
 

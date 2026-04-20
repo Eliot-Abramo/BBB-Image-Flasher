@@ -108,6 +108,21 @@
       color: #7de0ff;
     }
 
+    .runtime-chip {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      margin-bottom: 1rem;
+      padding: 0.45rem 0.85rem;
+      border-radius: 999px;
+      background: rgba(255, 255, 255, 0.16);
+      border: 1px solid rgba(255, 255, 255, 0.24);
+      font-size: 0.82rem;
+      font-weight: 700;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+    }
+
     /* ── Steps ── */
     .step {
       background: white;
@@ -736,6 +751,7 @@
 
     <!-- ── Hero ── -->
     <div class="hero">
+      <div class="runtime-chip">Runtime: {{ runtime_label }}</div>
       <h1>BBB Image Forge</h1>
       <p class="tagline">Build a custom BeagleBone Black SD card image — no command-line experience required.</p>
       <div class="what-is-this">
@@ -749,20 +765,28 @@
       </div>
     </div>
 
-    {% if os_name != "Linux" %}
+    {% if not supports_build %}
     <div class="step" style="border: 2px solid #f5a0a0; background:#fff7f7;">
-      <div style="font-weight:700; color:#a01a1a; margin-bottom:0.4rem;">Linux required for building</div>
+      <div style="font-weight:700; color:#a01a1a; margin-bottom:0.4rem;">Build in WSL/Linux, flash in Windows</div>
       <div style="font-size:0.92rem; color:#6d4c00;">
-        This simplified version of BBB Image Forge only supports building images on a <strong>Linux machine</strong>.
-        Flashing is also intended for Linux in this version.
+        {{ build_guidance }}
+        The image builder depends on Linux tools such as <code>losetup</code>, <code>mount</code>,
+        <code>chroot</code>, <code>debugfs</code>, and <code>sfdisk</code>.
       </div>
     </div>
     {% endif %}
 
-    {% if os_name == "Linux" and not running_as_admin %}
+    {% if is_linux_runtime and not running_as_admin %}
     <div class="help-box">
       <strong>Linux note:</strong> Building stays unprivileged and writes only inside this project folder.
       Administrator permission is only needed later if you choose to write the finished image directly to an SD card.
+    </div>
+    {% endif %}
+
+    {% if is_wsl_runtime %}
+    <div class="help-box">
+      <strong>WSL note:</strong> Build here in Ubuntu/WSL, keep the repo inside the WSL filesystem for better speed,
+      and use the native Windows launcher later when you want to write the finished image to an SD card.
     </div>
     {% endif %}
 
@@ -1015,15 +1039,20 @@
 
       <!-- ── Build button ── -->
       <div class="build-section">
-        <button type="button" class="build-btn" id="build-btn" onclick="startBuild()">
+        <button type="button" class="build-btn" id="build-btn" onclick="startBuild()" {% if not supports_build %}disabled style="opacity:0.6; cursor:not-allowed;" {% endif %}>
           Build My Image
         </button>
         <div class="build-hint">
-          Builds your custom image on this machine — downloads the official BeagleBone Black base image,
-          prepares your chosen software and settings, and produces a ready-to-flash file.
+          {% if supports_build %}
+          Builds your custom image on this {{ runtime_label }} machine — downloads the official BeagleBone Black base
+          image, prepares your chosen software and settings, and produces a ready-to-flash file.
           This takes <strong>10–30 minutes</strong> depending on the packages you picked.
           <strong>You do not need an SD card plugged in to build the image.</strong>
           Your BBB completes the package installation on its first boot.
+          {% else %}
+          This runtime is for flashing guidance only. Start the app from Ubuntu/Linux or WSL to build the image, then
+          come back here from native Windows to flash it to an SD card.
+          {% endif %}
         </div>
       </div>
 
@@ -1058,7 +1087,7 @@
           <div>
             <strong>Fill in the form above and click Build.</strong>
             The tool downloads the official BeagleBone Black Linux image, installs everything you chose,
-            and produces a <code>.img.xz</code> file — all automatically.
+            and produces a <code>.img.xz</code> file — all automatically in Linux or WSL.
           </div>
         </li>
         <li>

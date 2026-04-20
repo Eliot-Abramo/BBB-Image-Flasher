@@ -4,7 +4,6 @@ from app import main
 
 
 def test_cli_command_stays_unprivileged_for_build_flash_and_eject(monkeypatch):
-    monkeypatch.setattr(main.platform, "system", lambda: "Linux")
     monkeypatch.setattr(main, "is_admin", lambda: False)
     monkeypatch.setattr(
         main, "_managed_python", lambda: "/opt/conda/envs/bbb/bin/python"
