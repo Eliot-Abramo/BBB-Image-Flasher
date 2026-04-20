@@ -17,7 +17,6 @@ from fastapi.responses import HTMLResponse, PlainTextResponse, StreamingResponse
 from fastapi.templating import Jinja2Templates
 
 from app.bundles import BUNDLES, bundle_names, bundles_by_category
-from app.catalog import BeagleCatalog, CatalogError
 from app.flasher import (
     admin_instructions,
     eject_drive,
@@ -37,9 +36,8 @@ CLI_WRAPPER = PROJECT_ROOT / "bbb_image_forge_cli.py"
 app = FastAPI(title="BBB Image Forge")
 templates = Jinja2Templates(directory=str(BASE_DIR / "templates"))
 
-_catalog_executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix="catalog")
+_device_executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix="devices")
 _flash_executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix="flash")
-_CATALOG_TIMEOUT = 6.0
 
 
 def _managed_python() -> str:
@@ -61,25 +59,6 @@ def _cli_command(*args: str, privileged: bool = False) -> list[str]:
 
 @app.get("/", response_class=HTMLResponse)
 async def index(request: Request):
-    catalog_entries = []
-    catalog_error = None
-    loop = asyncio.get_event_loop()
-    try:
-        catalog_entries = await asyncio.wait_for(
-            loop.run_in_executor(
-                _catalog_executor,
-                lambda: BeagleCatalog().fetch_bbb_images()[:8],
-            ),
-            timeout=_CATALOG_TIMEOUT,
-        )
-    except asyncio.TimeoutError:
-        catalog_error = (
-            "Catalog fetch timed out — beagleboard.org may be slow. "
-            "The tool still works fine."
-        )
-    except Exception as exc:
-        catalog_error = str(exc)
-
     return templates.TemplateResponse(
         request,
         "index.html",
@@ -87,8 +66,6 @@ async def index(request: Request):
             "profiles": available_profiles(),
             "bundles": [BUNDLES[name] for name in bundle_names()],
             "bundles_by_category": bundles_by_category(),
-            "catalog_entries": catalog_entries,
-            "catalog_error": catalog_error,
             "artifacts": [str(a) for a in _find_artifacts()],
             "os_name": platform.system(),
             "running_as_admin": is_admin(),
@@ -333,7 +310,7 @@ async def api_drives():
     loop = asyncio.get_event_loop()
     try:
         drives = await asyncio.wait_for(
-            loop.run_in_executor(_catalog_executor, list_drives),
+            loop.run_in_executor(_device_executor, list_drives),
             timeout=12.0,
         )
         return {"drives": [d.as_dict() for d in drives]}

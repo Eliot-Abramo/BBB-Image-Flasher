@@ -34,6 +34,42 @@
       padding: 2rem 1rem 4rem;
     }
 
+    .top-tabs {
+      display: flex;
+      gap: 0.75rem;
+      margin-bottom: 1.25rem;
+    }
+
+    .top-tab {
+      flex: 1;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      padding: 0.85rem 1rem;
+      border-radius: 14px;
+      text-decoration: none;
+      font-weight: 700;
+      font-size: 0.95rem;
+      border: 2px solid #d7e3ef;
+      background: white;
+      color: #486176;
+      box-shadow: 0 2px 10px rgba(0, 0, 0, 0.04);
+      transition: transform 0.12s ease, box-shadow 0.12s ease, border-color 0.12s ease;
+    }
+
+    .top-tab:hover {
+      transform: translateY(-1px);
+      border-color: #9fc6e2;
+      box-shadow: 0 6px 18px rgba(15, 98, 147, 0.08);
+    }
+
+    .top-tab.active {
+      border-color: #0f6293;
+      background: linear-gradient(135deg, #1a2e4a 0%, #0f6293 100%);
+      color: white;
+      box-shadow: 0 8px 22px rgba(15, 98, 147, 0.2);
+    }
+
     /* ── Hero header ── */
     .hero {
       background: linear-gradient(135deg, #1a2e4a 0%, #0f6293 100%);
@@ -693,6 +729,11 @@
 <body>
   <div class="page-wrap">
 
+    <div class="top-tabs">
+      <a class="top-tab active" href="/">Build Image</a>
+      <a class="top-tab" href="/flash">Flash SD Card</a>
+    </div>
+
     <!-- ── Hero ── -->
     <div class="hero">
       <h1>BBB Image Forge</h1>
@@ -863,20 +904,23 @@
               <label class="field-label" for="static_address">IP Address (with subnet)</label>
               <input type="text" id="static_address" name="static_address" placeholder="e.g. 192.168.1.100/24">
               <div class="field-hint">Write the address and mask together, like <code>192.168.1.100/24</code>. The
-                <code>/24</code> means a standard home network subnet.</div>
+                <code>/24</code> means a standard home network subnet.
+              </div>
             </div>
             <div class="form-group">
               <label class="field-label" for="static_gateway">Gateway (your router's IP)</label>
               <input type="text" id="static_gateway" name="static_gateway" placeholder="e.g. 192.168.1.1">
               <div class="field-hint">Usually your router's IP. Check it by running <code>ipconfig</code> (Windows) or
-                <code>ip route</code> (Linux/Mac).</div>
+                <code>ip route</code> (Linux/Mac).
+              </div>
             </div>
           </div>
           <div class="form-group">
             <label class="field-label" for="static_dns">DNS Servers (space-separated)</label>
             <input type="text" id="static_dns" name="static_dns" value="8.8.8.8 1.1.1.1">
             <div class="field-hint">DNS servers translate domain names to IPs. <code>8.8.8.8</code> is Google,
-              <code>1.1.1.1</code> is Cloudflare. The defaults are fine.</div>
+              <code>1.1.1.1</code> is Cloudflare. The defaults are fine.
+            </div>
           </div>
         </div>
       </div>
@@ -974,13 +1018,13 @@
         <button type="button" class="build-btn" id="build-btn" onclick="startBuild()">
           Build My Image
         </button>
-      <div class="build-hint">
-        Builds your custom image on this machine — downloads the official BeagleBone Black base image,
-        prepares your chosen software and settings, and produces a ready-to-flash file.
-        This takes <strong>10–30 minutes</strong> depending on the packages you picked.
-        <strong>You do not need an SD card plugged in to build the image.</strong>
-        Your BBB completes the package installation on its first boot.
-      </div>
+        <div class="build-hint">
+          Builds your custom image on this machine — downloads the official BeagleBone Black base image,
+          prepares your chosen software and settings, and produces a ready-to-flash file.
+          This takes <strong>10–30 minutes</strong> depending on the packages you picked.
+          <strong>You do not need an SD card plugged in to build the image.</strong>
+          Your BBB completes the package installation on its first boot.
+        </div>
       </div>
 
     </form>
@@ -1028,13 +1072,14 @@
         </li>
         <li>
           <div class="step-num">3</div>
-        <div>
-          <strong>Boot your BBB.</strong>
-          Insert the card into the BeagleBone Black (slot on the <strong>underside</strong>) and connect the power.
-          The four blue LEDs will do various blink patterns — that's completely normal.
-          First boot may take several minutes while BBB Image Forge finishes setup and installs your selected packages.
-        </div>
-      </li>
+          <div>
+            <strong>Boot your BBB.</strong>
+            Insert the card into the BeagleBone Black (slot on the <strong>underside</strong>) and connect the power.
+            The four blue LEDs will do various blink patterns — that's completely normal.
+            First boot may take several minutes while BBB Image Forge finishes setup and installs your selected
+            packages.
+          </div>
+        </li>
         <li>
           <div class="step-num">4</div>
           <div>
@@ -1063,25 +1108,6 @@
         <div class="success-text" id="success-text">Your image is ready on this machine.</div>
         <a class="flash-now-btn" id="flash-now-btn" href="/flash">Flash Later</a>
       </div>
-    </div>
-
-    <!-- ── Official images ── -->
-    <div class="images-box">
-      <h2>Official BeagleBone Black Base Images</h2>
-      {% if catalog_error %}
-      <p style="color:#a01a1a; font-size:0.88rem;">Could not fetch live catalog: {{ catalog_error }}</p>
-      {% else %}
-      <p style="font-size:0.85rem; color:#5a7184; margin-bottom:1rem;">
-        These are the official Debian images from BeagleBoard.org that this tool builds on top of.
-        You don't need to download these manually — the build process handles it automatically.
-      </p>
-      {% for entry in catalog_entries %}
-      <div class="image-item">
-        <div class="image-label">{{ entry.label }}</div>
-        <div class="image-url">{{ entry.image_url }}</div>
-      </div>
-      {% endfor %}
-      {% endif %}
     </div>
 
   </div><!-- end .page-wrap -->
